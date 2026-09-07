@@ -1,0 +1,10 @@
+*
+!pom.xml
+!mvnw
+!.mvn/
+!.mvn/**
+!src/
+!src/**
+!docs/
+!docs/equipment/
+!docs/equipment/**

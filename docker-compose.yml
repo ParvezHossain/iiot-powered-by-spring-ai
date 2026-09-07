@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: iiot
+      POSTGRES_USER: iiot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-iiot_dev}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-vector.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U iiot -d iiot && psql -U iiot -d iiot -tAc \"SELECT extversion FROM pg_extension WHERE extname = 'vector'\" | grep -q ."]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  ollama:
+    image: ollama/ollama:latest
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+    ports:
+      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  app:
+    build: .
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/iiot
+      SPRING_DATASOURCE_USERNAME: iiot
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-iiot_dev}
+      OLLAMA_BASE_URL: http://ollama:11434
+      RAG_ENABLED: ${RAG_ENABLED:-false}
+      RAG_INGEST_ON_STARTUP: ${RAG_INGEST_ON_STARTUP:-true}
+      RAG_BATCH_SIZE: ${RAG_BATCH_SIZE:-16}
+      RAG_ANSWER_MODEL: ${RAG_ANSWER_MODEL:-qwen2.5:1.5b}
+      AGENT_ENABLED: ${AGENT_ENABLED:-false}
+      AGENT_MODEL: ${AGENT_MODEL:-qwen2.5:1.5b}
+      SIMULATOR_ENABLED: ${SIMULATOR_ENABLED:-true}
+      SIMULATOR_MACHINE_COUNT: ${SIMULATOR_MACHINE_COUNT:-5}
+      SIMULATOR_INTERVAL_MS: ${SIMULATOR_INTERVAL_MS:-5000}
+      SIMULATOR_ANOMALY_EVERY_TICKS: ${SIMULATOR_ANOMALY_EVERY_TICKS:-12}
+      SIMULATOR_SEED: ${SIMULATOR_SEED:-42}
+    ports:
+      - "127.0.0.1:${APP_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health/readiness"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+volumes:
+  postgres_data:
+  ollama_data:
