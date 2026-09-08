@@ -23,8 +23,10 @@ public class TelemetryTools {
         return queries.status(machineId);
     }
 
-    @Tool(description = "Read anomalies, newest first: temperature_celsius > 90, vibration_mm_s > 5, "
-            + "or modbus_hr_40001 = 65535 (sensor dropout). Each matching reading is one anomaly, not a root-cause diagnosis. "
+    @Tool(description = "Read statistical anomalies, newest first: temperature and vibration deviations with absolute rolling z-score > 4 "
+            + "against up to 30 earlier samples per machine/metric, requiring 10 prior samples. Includes baseline and score. "
+            + "Also reports modbus_hr_40001 = 65535 (sensor dropout), even during warm-up. "
+            + "Each matching reading is one anomaly, not a health verdict or root-cause diagnosis. "
             + "Defaults to the hour ending at to, or now UTC. Time bounds are inclusive. Results are paginated.")
     public List<TelemetryQueryService.Anomaly> getRecentAnomalies(
             @ToolParam(required = false, description = "Machine UUID; omit for all machines") UUID machineId,

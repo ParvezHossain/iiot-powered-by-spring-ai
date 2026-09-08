@@ -8,7 +8,7 @@ All endpoints use GET and return JSON. Machine IDs are UUIDs from
 | --- | --- | --- |
 | `/api/machines/{id}/status` | None | Machine `id`, `name`, `location`, `status`, and `latestReadings` array |
 | `/api/machines/{id}/readings` | Required `from`, `to`; optional `metricType`, `limit`, `offset` | Array of raw readings, oldest first |
-| `/api/anomalies` | Optional `machineId`, `from`, `to`, `limit`, `offset` | Array of `{ "reading": {...}, "reason": "..." }`, newest first |
+| `/api/anomalies` | Optional `machineId`, `from`, `to`, `limit`, `offset` | Array of `{ "reading": {...}, "reason": "...", "baseline": {...} }`, newest first |
 
 A reading contains `id`, `machineId`, `metricType`, `value`, and `timestamp`.
 Both time bounds are inclusive. Equal timestamps are ordered by reading ID in
@@ -28,14 +28,33 @@ Anomalies default to the hour ending at `to`, or at the current UTC time when
 
 | Metric | Rule | Reason |
 | --- | --- | --- |
-| `temperature_celsius` | Value > 90 °C | `HIGH_TEMPERATURE` |
-| `vibration_mm_s` | Value > 5 mm/s | `HIGH_VIBRATION` |
+| `temperature_celsius` | Absolute rolling z-score > 4 | `HIGH_TEMPERATURE` or `LOW_TEMPERATURE` |
+| `vibration_mm_s` | Absolute rolling z-score > 4 | `HIGH_VIBRATION` or `LOW_VIBRATION` |
 | `modbus_hr_40001` | Value = 65535 | `SENSOR_DROPOUT` |
 
-These fixed initial thresholds apply to every machine. Each matching reading is
-one anomaly; a simultaneous temperature and vibration spike produces two results.
-Missing readings alone are not detected as dropouts. Fault events and simulator
-quality flags are not needed for threshold detection.
+The detector replaces the initial 90 °C / 5 mm/s cutoffs with a separate baseline
+for each machine and metric. It uses the previous 30 readings, requires at least
+10 prior readings, and excludes the candidate from its own baseline. The score is
+`(value - mean) / max(sample standard deviation, noise floor)`, with floors of
+0.5 °C and 0.05 mm/s to avoid division by zero and oversensitivity to tiny noise.
+The floors are scale regularizers, not safe operating limits. Scores above 4 or
+below -4 are flagged. No statistical flag is emitted during warm-up.
+
+`baseline` contains `sampleCount`, `mean`, `standardDeviation`, `scale` (the
+denominator after applying the floor), signed `zScore`, and `threshold` (4).
+For a dropout, `baseline` is null: the explicit register sentinel is recognized
+without warm-up. Each matching reading is one anomaly, so a simultaneous
+temperature/vibration spike produces two results. Missing readings alone are not
+detected as dropouts. Cumulative energy, duplicate converted registers, load and
+quality registers are not statistically scored. The detector never reads fault
+events or quality flags as labels; those are used only by acceptance tests.
+
+Prior samples are fetched before the requested `from` time, and pagination is
+applied after scoring. Narrowing the result range or changing pages does not reset
+the baseline. Timestamp then ID defines sample order, including ties. Baselines
+are reconstructed from persisted data, so app restarts preserve the detector's
+history without in-memory state. Late/backfilled readings can change later scores.
+See [detector evaluation and limitations](anomaly-detection.md).
 
 Unknown machine IDs return HTTP 404, including an unknown `machineId` filter.
 Malformed IDs/timestamps, missing required bounds, reversed ranges, blank or

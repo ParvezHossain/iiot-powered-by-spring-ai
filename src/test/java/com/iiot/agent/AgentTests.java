@@ -34,6 +34,7 @@ class AgentTests {
     private ChatModel model;
     private TelemetryQueryService queries;
     private VectorStore vectors;
+    private JdbcTemplate jdbc;
     private AgentService service;
     private MockMvc mvc;
     private final JsonMapper json = JsonMapper.builder().build();
@@ -44,7 +45,8 @@ class AgentTests {
         model = mock(ChatModel.class);
         queries = mock(TelemetryQueryService.class);
         vectors = mock(VectorStore.class);
-        var knowledge = new AgentKnowledgeTools(vectors, new RagAnswerProperties("test", 6, 0.45), mock(JdbcTemplate.class));
+        jdbc = mock(JdbcTemplate.class);
+        var knowledge = new AgentKnowledgeTools(vectors, new RagAnswerProperties("test", 6, 0.45), jdbc);
         var provider = MethodToolCallbackProvider.builder().toolObjects(new TelemetryTools(queries), knowledge).build();
         service = new AgentService(model, provider, new AgentProperties("test", 4, 8));
         mvc = MockMvcBuilders.standaloneSetup(new AgentController(service)).build();
@@ -97,6 +99,48 @@ class AgentTests {
         assertThat(result.answer()).contains("[T1]", "[T2]");
         verify(queries).status(machine);
         verify(vectors).similaritySearch(any(SearchRequest.class));
+    }
+
+    @Test
+    void mixedQuestionResolvesNumericAliasThenGroundsReadingAndAction() throws Exception {
+        when(jdbc.queryForList(anyString(), eq("12"), eq("SIM-012")))
+                .thenReturn(List.of(Map.of("id", machine, "name", "SIM-012", "location", "Line 1")));
+        var sampledAt = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC).withNano(0);
+        when(queries.status(machine)).thenReturn(new TelemetryQueryService.MachineStatus(
+                machine, "SIM-012", "Line 1", "RUNNING", List.of(new TelemetryQueryService.Reading(
+                        1, machine, "vibration_mm_s", 7.2, sampledAt))));
+        String answer = "Machine 12 measured 7.2 mm/s at " + sampledAt + " [T2]. "
+                + "This exceeds its manual's 5 mm/s inspection threshold; stop and isolate before inspection [T3].";
+        when(model.call(any(Prompt.class))).thenReturn(
+                calls(tool("resolveMachine", Map.of("name", "12"))),
+                calls(tool("getMachineStatus", Map.of("machineId", machine.toString())),
+                        tool("retrieveEquipmentKnowledge", Map.of("question", "SIM-012 vibration normal range and actions"))),
+                text("ready"), text(finalAnswer(answer, false, "T2", "T3")));
+
+        mvc.perform(request("Is machine 12's vibration reading normal, and what should I do if not?"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.insufficientEvidence").value(false))
+                .andExpect(jsonPath("$.answer").value(answer))
+                .andExpect(jsonPath("$.evidence[0].tool").value("resolveMachine"))
+                .andExpect(jsonPath("$.evidence[1].tool").value("getMachineStatus"))
+                .andExpect(jsonPath("$.evidence[2].tool").value("retrieveEquipmentKnowledge"));
+        verify(jdbc).queryForList(anyString(), eq("12"), eq("SIM-012"));
+        verify(queries).status(machine);
+        var prompts = org.mockito.ArgumentCaptor.forClass(Prompt.class);
+        verify(model, times(4)).call(prompts.capture());
+        assertThat(((org.springframework.ai.ollama.api.OllamaChatOptions) prompts.getAllValues().get(0).getOptions())
+                .getToolCallbacks()).extracting(c -> c.getToolDefinition().name())
+                .contains("resolveMachine", "retrieveEquipmentKnowledge", "getRecentAnomalies")
+                .doesNotContain("getMachineStatus", "queryTelemetryRange");
+        assertThat(((org.springframework.ai.ollama.api.OllamaChatOptions) prompts.getAllValues().get(1).getOptions())
+                .getToolCallbacks()).extracting(c -> c.getToolDefinition().name())
+                .contains("getMachineStatus", "queryTelemetryRange");
+        assertThat(prompts.getAllValues().get(1).getInstructions())
+                .filteredOn(m -> m instanceof ToolResponseMessage)
+                .anySatisfy(m -> assertThat(((ToolResponseMessage) m).getResponses().getFirst().responseData())
+                        .contains(machine.toString(), "SIM-012"));
+        assertThat(prompts.getAllValues().get(3).getUserMessage().getText())
+                .contains("7.2", sampledAt.toString(), "5 mm/s", "manual.md", "T2", "T3");
     }
 
     @Test
@@ -166,6 +210,87 @@ class AgentTests {
 
     private AssistantMessage.ToolCall tool(String name, Map<String, Object> args) {
         return new AssistantMessage.ToolCall(UUID.randomUUID().toString(), "function", name, json.writeValueAsString(args));
+    }
+
+    @Test
+    void threeTurnConversationCarriesMachineAndMetricIntoLastWeekQuery() throws Exception {
+        when(jdbc.queryForList(anyString(), eq("12"), eq("SIM-012")))
+                .thenReturn(List.of(Map.of("id", machine, "name", "SIM-012")));
+        var monday = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
+                .with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+                .atStartOfDay().atOffset(java.time.ZoneOffset.UTC);
+        var from = monday.minusWeeks(1);
+        var to = monday.minusNanos(1);
+        when(queries.readings(machine, from, to, "vibration_mm_s", 100, 0))
+                .thenReturn(List.of(new TelemetryQueryService.Reading(1, machine, "vibration_mm_s", 2.1, from.plusDays(1))));
+        when(model.call(any(Prompt.class))).thenReturn(
+                calls(tool("resolveMachine", Map.of("name", "12"))),
+                text("ready"), text(finalAnswer("Machine 12 is SIM-012 [T1].", false, "T1")),
+                calls(tool("getMachineStatus", Map.of("machineId", machine.toString()))),
+                text("ready"), text(finalAnswer("Its stored status is RUNNING but no vibration samples are available [T1].", true, "T1")),
+                calls(tool("queryTelemetryRange", Map.of("machineId", machine.toString(), "metricType", "vibration_mm_s",
+                        "from", from.toString(), "to", to.toString()))),
+                text("ready"), text(finalAnswer("Machine 12 had one vibration sample of 2.1 mm/s during "
+                        + from + " through " + to + " [T1].", false, "T1")));
+        var first = mvc.perform(request("Find machine 12."))
+                .andExpect(status().isOk()).andReturn();
+        String id = json.readTree(first.getResponse().getContentAsString()).path("conversationId").asString();
+        for (String question : List.of("What is its latest vibration reading?", "And what about last week?")) {
+            mvc.perform(post("/api/agent/chat").contentType("application/json")
+                            .content(json.writeValueAsString(Map.of("question", question, "conversationId", id))))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.conversationId").value(id))
+                    .andExpect(jsonPath("$.insufficientEvidence").value(question.contains("last week") ? false : true));
+        }
+        verify(jdbc, times(1)).queryForList(anyString(), eq("12"), eq("SIM-012"));
+        verify(queries).readings(machine, from, to, "vibration_mm_s", 100, 0);
+        var prompts = org.mockito.ArgumentCaptor.forClass(Prompt.class);
+        verify(model, times(9)).call(prompts.capture());
+        for (int index : List.of(6, 8)) {
+            String context = prompts.getAllValues().get(index).getInstructions().stream()
+                    .map(org.springframework.ai.chat.messages.Message::getText).collect(java.util.stream.Collectors.joining("\n"));
+            assertThat(context).contains("latest vibration reading", "Find machine 12.", "SIM-012", machine.toString(),
+                    "And what about last week?");
+        }
+        assertThat(prompts.getAllValues().get(6).getSystemMessage().getText()).contains(from.toString(), to.toString());
+        var synthesis = json.readTree(prompts.getAllValues().get(8).getUserMessage().getText());
+        assertThat(synthesis.path("history").size()).isEqualTo(2);
+        assertThat(synthesis.path("evidence").size()).isEqualTo(1);
+        assertThat(synthesis.path("evidence").get(0).path("tool").asString()).isEqualTo("queryTelemetryRange");
+    }
+
+    @Test
+    void conversationsDoNotShareIdentityOrHistoryAndUnknownIdsNeverCallModel() throws Exception {
+        when(model.call(any(Prompt.class))).thenReturn(text("ready"), text(finalAnswer("Hello", false)));
+        var first = service.chat("Remember machine " + machine, null);
+        when(model.call(any(Prompt.class))).thenReturn(
+                calls(tool("getMachineStatus", Map.of("machineId", machine.toString()))),
+                text("ready"), text(finalAnswer("Which machine?", true)));
+        var other = service.chat("What about its vibration?", null);
+        assertThat(other.conversationId()).isNotEqualTo(first.conversationId());
+        assertThat(other.evidence().getFirst().success()).isFalse();
+        verifyNoInteractions(queries);
+        clearInvocations(model);
+        for (String id : List.of(UUID.randomUUID().toString(), "not-a-uuid")) {
+            mvc.perform(post("/api/agent/chat").contentType("application/json")
+                            .content(json.writeValueAsString(Map.of("question", "Hello", "conversationId", id))))
+                    .andExpect(status().is(id.equals("not-a-uuid") ? 400 : 404));
+        }
+        verifyNoInteractions(model);
+    }
+
+    @Test
+    void failedModelTurnDoesNotEnterHistory() {
+        when(model.call(any(Prompt.class))).thenReturn(text("ready"), text(finalAnswer("Hello", false)));
+        var first = service.chat("Hello", null);
+        when(model.call(any(Prompt.class))).thenThrow(new IllegalStateException("offline"));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.chat("failed question", first.conversationId()))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        clearInvocations(model);
+        doReturn(text("ready"), text(finalAnswer("Hello again", false))).when(model).call(any(Prompt.class));
+        service.chat("Try again", first.conversationId());
+        var prompts = org.mockito.ArgumentCaptor.forClass(Prompt.class);
+        verify(model, times(2)).call(prompts.capture());
+        assertThat(prompts.getAllValues().get(1).getUserMessage().getText()).contains("Hello").doesNotContain("failed question");
     }
 
     private ChatResponse calls(AssistantMessage.ToolCall... calls) {

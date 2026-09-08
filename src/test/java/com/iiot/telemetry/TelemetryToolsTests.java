@@ -36,6 +36,10 @@ class TelemetryToolsTests {
     void seed() {
         machine = UUID.randomUUID();
         jdbc.update("INSERT INTO telemetry.machines (id, name, status) VALUES (?, 'Tool test press', 'RUNNING')", machine);
+        for (int sample = 30; sample > 0; sample--) {
+            reading("temperature_celsius", 90, FROM.minusMinutes(sample));
+            reading("vibration_mm_s", 2, FROM.minusMinutes(sample));
+        }
         reading("temperature_celsius", 90, FROM);
         reading("temperature_celsius", 100, TO);
         reading("vibration_mm_s", 6, TO);

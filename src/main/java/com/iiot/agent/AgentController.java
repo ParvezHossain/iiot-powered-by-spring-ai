@@ -18,9 +18,9 @@ public class AgentController {
     }
 
     @PostMapping("/api/agent/chat")
-    public AgentService.Answer chat(@Valid @RequestBody Question request) {
-        return agent.answer(request.question().strip());
+    public AgentService.ConversationAnswer chat(@Valid @RequestBody Question request) {
+        return agent.chat(request.question().strip(), request.conversationId());
     }
 
-    public record Question(@NotBlank @Size(max = 2000) String question) {}
+    public record Question(@NotBlank @Size(max = 2000) String question, java.util.UUID conversationId) {}
 }

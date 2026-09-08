@@ -146,9 +146,11 @@ GROUP BY fault_code;
 ## Raw telemetry API
 
 Query machine status with `GET /api/machines/{id}/status`, time-bounded readings
-with `GET /api/machines/{id}/readings?from=...&to=...`, and recent threshold-based
+with `GET /api/machines/{id}/readings?from=...&to=...`, and recent statistical
 anomalies with `GET /api/anomalies`. See the [API reference](docs/telemetry-api.md)
-for filters, pagination, thresholds, response fields, and curl examples.
+for filters, pagination, rolling baselines, response fields, and curl examples.
+The [detector evaluation](docs/anomaly-detection.md) measures precision and recall
+against simulator-injected faults across three seeds.
 
 ## Sample equipment documents
 
@@ -177,6 +179,19 @@ With `AGENT_ENABLED=true` and RAG enabled, `POST /api/agent/chat` lets the model
 select telemetry queries, document retrieval, both, or neither. Answers include
 the executed tool evidence and citation labels. See the [agent guide](docs/agent-chat.md)
 for machine lookup, configuration, limits, and live routing checks.
+Reuse the returned `conversationId` in subsequent requests to carry machine and
+metric context into follow-ups such as “and what about last week?”. Memory keeps
+up to six recent turns and expires after 30 minutes idle; see the guide for details.
+
+## MCP tools
+
+With `MCP_ENABLED=true` and a configured `MCP_API_KEY`, MCP clients can connect over Streamable HTTP at `/mcp`
+to list and call `getMachineStatus`, `getRecentAnomalies`, and `ragQuery`. Enable
+RAG to use the knowledge tool; the agent is not required. Each MCP request must
+send `Authorization: Bearer <MCP_API_KEY>`; unauthenticated requests return 401.
+The shared key grants access to the three read-only tools. See the
+[MCP server guide](docs/mcp-server.md) for setup, Inspector commands, and automated
+client acceptance tests.
 
 ## Verify
 

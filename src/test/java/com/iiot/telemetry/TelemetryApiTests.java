@@ -32,8 +32,12 @@ class TelemetryApiTests {
         other = UUID.randomUUID();
         for (UUID id : new UUID[]{machine, other}) {
             jdbc.update("INSERT INTO telemetry.machines (id, name, location, status) VALUES (?, 'Press', 'Line 1', 'RUNNING')", id);
+            for (int sample = 30; sample > 0; sample--) {
+                reading(id, "temperature_celsius", 90, OffsetDateTime.parse(FROM).minusMinutes(sample).toString());
+                reading(id, "vibration_mm_s", 5, OffsetDateTime.parse(FROM).minusMinutes(sample).toString());
+            }
         }
-        reading(machine, "temperature_celsius", 60, "2026-09-07T11:59:59Z");
+        reading(machine, "temperature_celsius", 90, "2026-09-07T11:59:59Z");
         reading(machine, "temperature_celsius", 90, FROM);
         reading(machine, "vibration_mm_s", 5, FROM);
         reading(machine, "temperature_celsius", 100, TO);
@@ -69,7 +73,7 @@ class TelemetryApiTests {
     }
 
     @Test
-    void anomaliesUseThresholdsWithoutRequiringFaultEvents() throws Exception {
+    void anomaliesUseRollingBaselinesWithoutRequiringFaultEvents() throws Exception {
         mvc.perform(get("/api/anomalies").param("from", FROM).param("to", TO))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(4))
                 .andExpect(jsonPath("$[0].reading.machineId").value(other.toString()));
@@ -78,6 +82,8 @@ class TelemetryApiTests {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(3))
                 .andExpect(jsonPath("$[0].reason").value("SENSOR_DROPOUT"))
                 .andExpect(jsonPath("$[1].reason").value("HIGH_VIBRATION"))
+                .andExpect(jsonPath("$[1].baseline.sampleCount").value(30))
+                .andExpect(jsonPath("$[1].baseline.mean").value(5.0))
                 .andExpect(jsonPath("$[2].reason").value("HIGH_TEMPERATURE"));
         mvc.perform(get("/api/anomalies").param("from", FROM).param("to", TO)
                         .param("machineId", machine.toString()).param("limit", "1").param("offset", "1"))
@@ -89,6 +95,9 @@ class TelemetryApiTests {
     void defaultAnomalyWindowExcludesOldAndFutureReadings() throws Exception {
         jdbc.update("DELETE FROM telemetry.sensor_readings WHERE machine_id = ?", other);
         var now = OffsetDateTime.now();
+        for (int sample = 30; sample > 0; sample--) {
+            reading(other, "vibration_mm_s", 2, now.minusHours(3).minusMinutes(sample).toString());
+        }
         reading(other, "vibration_mm_s", 20, now.minusHours(2).toString());
         reading(other, "vibration_mm_s", 21, now.minusMinutes(1).toString());
         reading(other, "vibration_mm_s", 22, now.plusHours(2).toString());

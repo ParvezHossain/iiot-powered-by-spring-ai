@@ -16,9 +16,11 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class TelemetryQueryService {
     private final JdbcTemplate jdbc;
+    private final RollingAnomalyDetector detector;
 
     public TelemetryQueryService(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
+        this.detector = new RollingAnomalyDetector(jdbc);
     }
 
     public MachineStatus status(UUID id) {
@@ -71,30 +73,7 @@ public class TelemetryQueryService {
         if (machineId != null) {
             requireMachine(machineId);
         }
-        String sql = """
-                SELECT id, machine_id, metric_type, "value", "timestamp"
-                FROM telemetry.sensor_readings WHERE "timestamp" >= ? AND "timestamp" <= ?
-                AND ((metric_type = 'temperature_celsius' AND "value" > 90)
-                  OR (metric_type = 'vibration_mm_s' AND "value" > 5)
-                  OR (metric_type = 'modbus_hr_40001' AND "value" = 65535))
-                """;
-        var args = new ArrayList<Object>(List.of(from, to));
-        if (machineId != null) {
-            sql += " AND machine_id = ?";
-            args.add(machineId);
-        }
-        sql += " ORDER BY \"timestamp\" DESC, id DESC LIMIT ? OFFSET ?";
-        args.add(limit);
-        args.add(offset);
-        return jdbc.query(sql, (rs, row) -> {
-            var reading = reading(rs);
-            String reason = switch (reading.metricType()) {
-                case "temperature_celsius" -> "HIGH_TEMPERATURE";
-                case "vibration_mm_s" -> "HIGH_VIBRATION";
-                default -> "SENSOR_DROPOUT";
-            };
-            return new Anomaly(reading, reason);
-        }, args.toArray());
+        return detector.detect(machineId, from, to, limit, offset);
     }
 
     private static void requireId(UUID id) {
@@ -129,5 +108,6 @@ public class TelemetryQueryService {
 
     public record Reading(long id, UUID machineId, String metricType, double value, OffsetDateTime timestamp) {}
     public record MachineStatus(UUID id, String name, String location, String status, List<Reading> latestReadings) {}
-    public record Anomaly(Reading reading, String reason) {}
+    public record Baseline(int sampleCount, double mean, double standardDeviation, double scale, double zScore, double threshold) {}
+    public record Anomaly(Reading reading, String reason, Baseline baseline) {}
 }
