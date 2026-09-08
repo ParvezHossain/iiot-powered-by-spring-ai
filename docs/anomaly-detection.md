@@ -70,7 +70,8 @@ produce false positives, as the measured results show. Missing signals without
 an explicit sentinel are not detected. Energy would require a separate detector
 on rate changes, rather than a z-score on the cumulative counter.
 
-Detection is computed when queried, not persisted or pushed as alerts. Queries
-may scan earlier history to obtain each series' warm-up rows; large deployments
-would need measured query tuning or incremental scoring. No alert delivery is
-implemented in this task.
+The query service computes detection from stored readings. The
+[background alert worker](alerting.md) also runs it automatically for new data,
+persists deduplicated alert records, and emits logs plus optional Gmail email.
+Queries may scan earlier history to obtain each series' warm-up rows; large
+deployments would need measured query tuning or incremental scoring.

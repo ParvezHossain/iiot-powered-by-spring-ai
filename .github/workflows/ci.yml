@@ -43,6 +43,10 @@ jobs:
       - name: Build and run tests
         run: ./mvnw --batch-mode --no-transfer-progress verify
 
+      - name: Run the one-command interview demo
+        timeout-minutes: 2
+        run: python3 scripts/demo.py
+
       - name: Verify schema, simulator, and query API on PostgreSQL
         env:
           SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:${{ job.services.postgres.ports[5432] }}/iiot_test

@@ -151,6 +151,9 @@ anomalies with `GET /api/anomalies`. See the [API reference](docs/telemetry-api.
 for filters, pagination, rolling baselines, response fields, and curl examples.
 The [detector evaluation](docs/anomaly-detection.md) measures precision and recall
 against simulator-injected faults across three seeds.
+New anomalies also produce automatic log alerts, normally within one second of
+committing a reading. Enable Gmail email delivery with `ALERTS_GMAIL_ENABLED=true`
+and account/recipient settings. See [alerting and Gmail setup](docs/alerting.md).
 
 ## Sample equipment documents
 
@@ -192,6 +195,14 @@ send `Authorization: Bearer <MCP_API_KEY>`; unauthenticated requests return 401.
 The shared key grants access to the three read-only tools. See the
 [MCP server guide](docs/mcp-server.md) for setup, Inspector commands, and automated
 client acceptance tests.
+
+## Interview demo
+
+Run `python3 scripts/demo.py` for a bounded, isolated demo of grounded answers,
+multi-turn memory, anomaly detection, and authenticated MCP. It uses clearly
+labeled deterministic model/retrieval fixtures with real application services.
+See [demo setup and the interview walkthrough](docs/interview-demo.md) for
+one-time dependency preparation and the distinction from live Ollama evaluation.
 
 ## Verify
 
