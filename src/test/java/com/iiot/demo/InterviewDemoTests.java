@@ -139,6 +139,8 @@ class InterviewDemoTests {
                 executed.add(evidence.path("tool").asString());
             }
             assertThat(executed).containsExactlyElementsOf(routes.get(turn));
+            assertThat(result.path("answer").asString()).isNotBlank();
+            assertThat(result.path("evidenceIds").size()).isEqualTo(turn == 1 ? 2 : 1);
             if (turn == 0) {
                 var latest = JSON.readTree(result.path("evidence").get(1).path("result").asString());
                 assertThat(latest.path("latestReadings").get(0).path("value").asDouble()).isEqualTo(7.2);
@@ -184,9 +186,13 @@ class InterviewDemoTests {
             var grounded = JSON.readTree(((McpSchema.TextContent) knowledge.content().getFirst()).text());
             assertThat(grounded.path("insufficientEvidence").asBoolean()).isFalse();
             assertThat(grounded.path("citations").get(0).path("source").asString()).isEqualTo("fault-code-reference.md");
+            assertThat(grounded.path("answer").asString()).contains("E204", "temperature sensor signal is unavailable");
             var status = client.callTool(McpSchema.CallToolRequest.builder().name("getMachineStatus")
                     .arguments(Map.of("machineId", MACHINE.toString())).build());
             assertThat(status.isError()).isFalse();
+            var machine = JSON.readTree(((McpSchema.TextContent) status.content().getFirst()).text());
+            assertThat(machine.path("name").asString()).isEqualTo("SIM-001");
+            assertThat(machine.path("latestReadings").get(0).path("value").asDouble()).isEqualTo(7.2);
             transcript.append("MCP security: missing token → 401; authenticated discovery and all three tools → PASS.\n")
                     .append("Sources: bundled synthetic pump manual and fault-code reference; RAG quotes validated.\n");
         }
@@ -195,6 +201,8 @@ class InterviewDemoTests {
         }
         org.awaitility.Awaitility.await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
                 assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM telemetry.anomaly_alerts", Integer.class)).isEqualTo(1));
+        assertThat(jdbc.queryForObject("SELECT email_status FROM telemetry.anomaly_alerts", String.class))
+                .isEqualTo("NOT_REQUESTED");
         transcript.append("Automatic alert: background worker recorded and logged HIGH_VIBRATION without an API trigger.\n")
                 .append("Gmail delivery is disabled in this isolated demo; no real email is sent.\n");
         String output = System.getProperty("demo.transcript");

@@ -76,7 +76,20 @@ applies; this demo does not claim to fix it.
 actual Python command with a two-minute job-step limit after dependencies have
 been prepared. The script has its own shorter deadline for cleanup.
 
-Local rehearsals completed in 28.5, 36.9, and 21.2 seconds. The last run started
-from outside the repository with invalid inherited database/profile settings,
-confirming that the script selected its own directory and isolated fixtures.
-These are measured prepared-checkout times, not a hardware-independent latency promise.
+T6.2 verification on 2026-09-08: three consecutive rehearsals completed in
+**26.7, 20.9, and 20.8 seconds**, each exiting 0 with the complete transcript and
+no Maven logs or warnings in the displayed output. The first included recompiling
+the strengthened scenario checks. The third started from `/tmp` with invalid
+database/profile and JVM/Maven settings plus Gmail enabled in the parent
+environment; the script selected its own directory and isolated fixtures.
+
+Checks additionally require cited evidence for every answer, the expected E204
+answer and MCP machine reading, and `NOT_REQUESTED` email delivery state. Each
+run creates new temporary services and stops them before reporting success.
+The existing CI step runs the same command with a two-minute limit.
+
+The under-two-minute acceptance criterion is met for this prepared-checkout
+replay on the verified machine. Dependency installation is a one-time prerequisite;
+unavailable dependencies, regressions, or an overloaded machine produce a
+nonzero exit rather than a false success. These measurements are not a
+hardware-independent latency promise.

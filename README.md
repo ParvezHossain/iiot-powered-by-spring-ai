@@ -2,229 +2,336 @@
 
 [![CI](https://github.com/ParvezHossain/iiot-powered-by-ai/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/ParvezHossain/iiot-powered-by-ai/actions/workflows/ci.yml)
 
-Initial Spring Boot scaffold for an AI-powered Industrial IoT platform. More documentation will follow.
+A local Industrial IoT demo that combines live simulated telemetry, equipment
+manuals, a conversational agent, and authenticated MCP tools. Spring Boot runs
+the simulator, rolling anomaly detector, REST APIs, agent, and alert workers;
+PostgreSQL/pgvector stores measurements and document embeddings; Ollama runs the
+embedding and chat models. No paid model API is required.
 
-## Requirements
+Equipment documents and machine data are synthetic. Answers expose their evidence;
+statistical deviations are not diagnoses or permission to operate equipment.
 
-- JDK 21 or newer (Java 21 is the compilation target).
-- Internet access on the first build to download Maven and dependencies.
+## Architecture
 
-## Run
-
-```sh
-./mvnw spring-boot:run
+```mermaid
+flowchart TD
+    User[REST / chat client] --> REST[Spring Boot REST endpoints]
+    REST --> Agent[Agent: tool selection and answer synthesis]
+    Agent <--> Memory[In-process conversation memory]
+    Agent <--> Chat[Ollama chat model]
+    Agent --> Tools[Machine lookup, status, history, anomalies]
+    Agent --> Retrieve[Equipment retrieval]
+    REST --> Query
+    REST -->|Document search| Retrieve
+    REST -->|Document ingestion| Ingest
+    REST --> RAG[RAG answer and citation validation]
+    RAG --> Retrieve
+    RAG <--> Chat
+    MCPClient[MCP-compatible client] --> Auth[Bearer key filter]
+    Auth --> MCP[MCP Java SDK /mcp]
+    MCP -->|Status and anomalies| Query
+    MCP --> RAG
+    Simulator[Scheduled simulator] --> SQL[(PostgreSQL telemetry schema)]
+    Tools --> Query[Query service and rolling z-score detector]
+    Query --> SQL
+    Docs[Bundled equipment Markdown] --> Ingest[Chunk and embed at startup]
+    Ingest --> Embed[Ollama Nomic embedding model]
+    Ingest --> Vectors[(pgvector equipment_vectors)]
+    Retrieve --> Embed
+    Retrieve --> Vectors
+    Monitor[One-second alert monitor] --> Query
+    Monitor --> Log[Visible ANOMALY_ALERT log]
+    Monitor --> Outbox[(Persistent alert records)]
+    Outbox --> Mail[Optional Gmail SMTP worker: TLS and retries]
 ```
 
-The application listens on port 8080. It includes Spring Web MVC, Data JPA,
-Validation, Actuator, and an in-memory H2 database. No external database is required;
-data is discarded on shutdown.
+The app is one deployable service. REST, agent tools, and MCP reuse the same query
+and RAG services. Flyway owns the `telemetry` schema; Spring AI initializes the
+separate vector table. Alert records also live in PostgreSQL’s `telemetry` schema.
+Alerts run independently of user questions.
 
-## Health check
+### Why RAG + tool calling + MCP?
 
-```sh
-curl --fail http://localhost:8080/actuator/health
-```
-
-Expected: HTTP 200 with a JSON body containing `"status":"UP"`. The health check includes database connectivity.
-
-## Local development with Docker
-
-Requires Docker Engine and the Docker Compose plugin. Start all three services:
-
-```sh
-docker compose up --build
-```
-
-Compose builds the app with Java 21 and starts PostgreSQL 17 with pgvector and
-CPU-based Ollama. The `docker` Spring profile connects to `postgres:5432` and
-`ollama:11434` on the Compose network. The app waits for healthy dependencies,
-then checks the pgvector extension and Ollama's `/api/tags` endpoint during
-startup. A failed connection stops application startup. No model is required
-or downloaded automatically.
-
-Verify the stack (or start in the background with `docker compose up -d --build --wait`):
-
-```sh
-docker compose ps
-curl --fail http://localhost:8080/actuator/health/readiness
-docker compose logs app
-docker compose exec postgres psql -U iiot -d iiot -c "SELECT extversion FROM pg_extension WHERE extname = 'vector';"
-curl --fail http://localhost:11434/api/tags
-```
-
-The app logs `Connected to PostgreSQL with pgvector` and `Connected to Ollama`
-after successful startup checks. Readiness becomes `UP` after these checks;
-they check startup connectivity, not continuous Ollama availability.
-
-Host ports default to 8080 (app), 5432 (Postgres), and 11434 (Ollama), bound to
-localhost. Override them if needed, for example:
-
-```sh
-APP_PORT=8081 POSTGRES_PORT=5433 OLLAMA_PORT=11435 docker compose up --build
-```
-
-The local database/user are `iiot`; the development password is `iiot_dev`,
-overridable with `POSTGRES_PASSWORD`. Postgres data and Ollama models persist in
-named volumes. The extension initialization script runs only when the database
-volume is first created; changing the password does not update an existing database.
-
-Stop the stack with `docker compose down`. To deliberately erase local database
-data and downloaded models, use `docker compose down --volumes`.
-
-## Telemetry schema
-
-The [schema documentation and ERD](docs/telemetry-schema.md) describe machines,
-sensor readings, and machine events. Flyway applies versioned migrations to the
-`telemetry` schema at startup on both H2 and PostgreSQL.
-
-## Telemetry simulator
-
-The simulator starts automatically after the app becomes ready. It creates five
-virtual machines (`SIM-001` through `SIM-005`) and writes readings every five
-seconds. A five-minute run produces roughly 2,000 rows, with occasional injected
-spikes and sensor dropouts. Stable machine UUIDs prevent duplicate machines across
-restarts, and cumulative energy resumes from the last stored reading.
-
-| Setting / environment variable | Default | Meaning |
+| Component | Problem it solves | Example |
 | --- | --- | --- |
-| `simulator.enabled` / `SIMULATOR_ENABLED` | `true` | Enable scheduled generation |
-| `simulator.machine-count` / `SIMULATOR_MACHINE_COUNT` | `5` | Active virtual machines (1–1000) |
-| `simulator.interval-ms` / `SIMULATOR_INTERVAL_MS` | `5000` | Delay between batches, minimum 100 ms |
-| `simulator.anomaly-every-ticks` / `SIMULATOR_ANOMALY_EVERY_TICKS` | `12` | One affected machine every N batches, minimum 2 |
-| `simulator.seed` / `SIMULATOR_SEED` | `42` | Repeatable noise and machine selection |
+| RAG | Retrieves relevant manual/log passages and attaches source quotes without putting the entire corpus in every prompt | “What does E204 mean?” |
+| Tool calling | Fetches current or time-bounded facts from the database; the model chooses bounded Java functions instead of generating SQL | “What is SIM-001's latest vibration reading?” |
+| RAG + tools | Combines measured data with applicable documented ranges/actions | “Is that vibration normal, and what should I do?” |
+| MCP | Exposes those services through a standard tool protocol so an external client can discover and call them | `getMachineStatus`, `getRecentAnomalies`, `ragQuery` |
 
-For example, `SIMULATOR_MACHINE_COUNT=10 ./mvnw spring-boot:run` runs ten machines.
-The same environment variables work with `docker compose up --build`. Set
-`SIMULATOR_ENABLED=false` to disable generation. Use one simulator-enabled app
-instance per database. Reducing N stops sampling higher-numbered machines but
-retains their history. H2 data disappears on exit; Compose Postgres persists it.
+The chat model chooses data tools, retrieval, both, or neither. It resolves machine
+names to stored UUIDs and synthesizes an answer from actual results. Agent evidence
+labels are checked against successful calls; RAG quotes are checked against retrieved
+passages. These checks establish provenance, not correctness of every interpretation.
 
-| Metric | Behavior |
+Chat memory carries recent context when the caller reuses `conversationId`; fresh
+facts still require fresh queries. Memory lasts up to six turns and 30 minutes idle,
+and disappears on restart. MCP clients manage their own conversation context and
+do not call through the chat agent.
+
+## Run the full stack
+
+Requirements: Docker Engine/Docker Desktop with the Compose v2 plugin, internet
+access for the first image/build/model downloads, and a shell with `openssl` and
+`curl`. Commands below use Bash on Linux/macOS or WSL. Java, Maven, and Node are
+not needed for Docker startup. Allow several GB of disk for images and models;
+CPU inference and the initial corpus embedding can take minutes. The timed demo
+below is a separate, prepared-checkout workflow.
+
+Clone the repository (requires Git), or extract a downloaded source archive, then
+open a terminal in its root directory:
+
+```sh
+git clone https://github.com/ParvezHossain/iiot-powered-by-ai.git
+cd iiot-powered-by-ai
+```
+
+Prepare the local configuration once:
+
+```sh
+cp .env.example .env
+printf '\nMCP_API_KEY=%s\n' "$(openssl rand -hex 32)" >> .env
+```
+
+If `.env` already exists, edit it instead of overwriting it. It is ignored by Git.
+The example selects both Compose files using `COMPOSE_FILE`; the AI override
+requires your generated key and enables RAG, chat, and MCP. For native Windows
+Compose, use `;` as the file separator or pass both files with `-f` explicitly.
+
+Start everything with one command:
+
+```sh
+docker compose up --build -d --wait --wait-timeout 900
+```
+
+Compose starts PostgreSQL 17/pgvector and CPU Ollama. The one-shot `models` service
+downloads missing `nomic-embed-text:v1.5` and `qwen2.5:1.5b` models into Ollama's persistent volume;
+the app starts only after downloads succeed. It applies migrations, embeds the ten
+bundled equipment documents, enables all three MCP tools, and starts simulation
+and log alerts. `models` exiting with code 0 is expected. First-time downloads and
+image builds can exceed 15 minutes on a slow connection; the wait timeout is not
+a total download/build deadline. View progress with `docker compose logs -f models app`.
+
+Check readiness and the indexed corpus:
+
+```sh
+docker compose ps -a
+curl --fail http://localhost:8080/actuator/health/readiness
+docker compose exec -T postgres psql -U iiot -d iiot -c \
+  "SELECT COUNT(*) AS chunks, COUNT(DISTINCT metadata->>'document_id') AS documents FROM public.equipment_vectors;"
+```
+
+Expect `{"status":"UP"}`, 10 documents, and 34 chunks for the current corpus.
+Readiness confirms startup checks/ingestion; it does not guarantee later model
+availability or answer quality. Models are downloaded explicitly by the Compose
+helper, never by a user question. Subsequent starts reuse downloaded model blobs
+without contacting the model registry. To update an installed chat model explicitly,
+run `docker compose exec ollama ollama pull qwen2.5:1.5b` (substitute your configured
+model), then restart the app.
+
+### Try the system
+
+The default simulator creates `SIM-001` through `SIM-005`, with readings every
+five seconds. Retrieve a real UUID and its latest status:
+
+```sh
+MACHINE_ID=$(docker compose exec -T postgres psql -U iiot -d iiot -Atc \
+  "SELECT id FROM telemetry.machines WHERE name = 'SIM-001';")
+curl --fail "http://localhost:8080/api/machines/$MACHINE_ID/status"
+curl --fail http://localhost:8080/api/anomalies
+```
+
+An empty anomaly list can be expected during warm-up; it does not certify machine
+health. The detector needs at least ten preceding samples, and the default
+simulator injects a spike/dropout every twelve batches (roughly one minute).
+
+Check retrieval and a grounded knowledge answer:
+
+```sh
+curl --fail --get http://localhost:8080/api/documents/search \
+  --data-urlencode 'query=What does E204 mean?' --data-urlencode 'topK=3'
+curl --fail http://localhost:8080/api/rag/query \
+  -H 'Content-Type: application/json' -d '{"question":"What does E204 mean?"}'
+```
+
+E204 denotes an unavailable temperature sensor signal in the fictional compressor
+reference. A supported answer includes checked source quotes; an unsupported or
+invalid generated answer returns `insufficientEvidence=true`.
+
+Ask a mixed question through the agent:
+
+```sh
+curl --fail http://localhost:8080/api/agent/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"Is SIM-001 vibration normal, and what should I do if not?"}'
+```
+
+The response exposes `answer`, `evidence`, `evidenceIds`, `insufficientEvidence`,
+and `conversationId`. To exercise three turns, copy the returned conversation ID
+and send these two follow-ups with the same ID:
+
+```sh
+CONVERSATION_ID=replace-with-returned-uuid
+curl --fail http://localhost:8080/api/agent/chat -H 'Content-Type: application/json' \
+  -d "{\"conversationId\":\"$CONVERSATION_ID\",\"question\":\"What is its latest vibration reading?\"}"
+curl --fail http://localhost:8080/api/agent/chat -H 'Content-Type: application/json' \
+  -d "{\"conversationId\":\"$CONVERSATION_ID\",\"question\":\"And what about last week?\"}"
+```
+
+A new database has no last-week history; the correct response reports missing data.
+“Last week” means the previous Monday–Sunday in UTC. Machine 12 is absent from the
+default fleet; use SIM-001 or configure at least twelve simulated machines.
+
+**Live-model limitation:** the small default chat model can skip required tools
+or fail final citation validation. In fresh-stack verification, the mixed question
+above returned `insufficientEvidence=true` with no tool evidence, while the REST
+and MCP RAG queries returned a correctly cited E204 answer. A separate telemetry
+chat successfully called machine lookup/status tools but failed final citation
+validation. CPU chat can take
+several minutes. A healthy stack therefore does not guarantee a successful mixed
+answer. The deterministic demo verifies routing
+and memory with fixtures; it is not evidence that all live model answers pass.
+`AGENT_MODEL` and `RAG_ANSWER_MODEL` in `.env` select other Ollama chat models;
+the bootstrap downloads both if they differ. Re-evaluate routing and citations
+after changing models. Keep the embedding model fixed to preserve vector compatibility.
+
+### Connect MCP
+
+Configure a client for **Streamable HTTP**, URL `http://localhost:8080/mcp`, and
+header `Authorization: Bearer <the MCP_API_KEY from your .env>`. Expect
+`getMachineStatus`, `getRecentAnomalies`, and `ragQuery`. This is not a stdio or
+legacy SSE server. The shared key grants all three read-only tools for all machines.
+
+Without credentials, this must return HTTP 401:
+
+```sh
+curl -i http://localhost:8080/mcp
+```
+
+For client discovery/calls without an LLM, the optional
+[MCP Inspector](https://github.com/modelcontextprotocol/inspector) requires
+Node/npm. Enter the same key when prompted, then list tools:
+
+```sh
+read -rs -p 'MCP API key from .env: ' MCP_API_KEY; echo
+npx @modelcontextprotocol/inspector --cli http://localhost:8080/mcp --transport http \
+  --header "Authorization: Bearer $MCP_API_KEY" --method tools/list
+```
+
+REST/chat have no user authentication; MCP authentication applies only to `/mcp`.
+Compose binds all published ports to localhost. This is a local demo deployment,
+not a public multi-tenant service.
+
+### See alerts and optionally enable Gmail
+
+```sh
+docker compose logs -f app
+```
+
+Look for `ANOMALY_ALERT` shortly after an injected fault. Log alerts need no email
+account. To send email through Gmail, put these settings in your ignored `.env`:
+
+```dotenv
+ALERTS_GMAIL_ENABLED=true
+GMAIL_USERNAME=your-account@gmail.com
+GMAIL_APP_PASSWORD=your-google-app-password
+ALERT_EMAIL_TO=your-recipient@example.com
+```
+
+Use a Google app password with 2-Step Verification, not your normal account
+password. Some account/organization policies do not permit app passwords; see
+[Google's setup instructions](https://support.google.com/accounts/answer/185833?hl=en).
+Run `docker compose up -d --wait --wait-timeout 900 app` to apply settings. The worker
+uses `smtp.gmail.com:587` with required STARTTLS and retries failed sends every
+30 seconds, up to five attempts. `ANOMALY_EMAIL_SENT` means SMTP accepted the
+message, not confirmed inbox delivery. Use one alert-worker instance per database.
+
+## Configuration and operations
+
+Edit `.env` and use the same Compose configuration for subsequent commands.
+Exported shell variables take precedence over `.env` values.
+
+| Setting | Default / behavior |
 | --- | --- |
-| `temperature_celsius` | Typically 50–80 °C; slow load cycles and small noise; spikes add 45 °C |
-| `vibration_mm_s` | Typically 1–3 mm/s, correlated with load; spikes add 10 mm/s |
-| `energy_kwh` | Cumulative energy derived from machine power and sample interval; never resets on restart |
-| `modbus_hr_40001` | Temperature × 10, or `65535` for an unavailable temperature sensor |
-| `modbus_hr_40002` | Vibration × 100 |
-| `modbus_hr_40003` | Load fraction × 1000 |
-| `modbus_hr_40004` | Quality flags: 0 normal, 1 injected spike, 2 temperature dropout |
+| `APP_PORT`, `POSTGRES_PORT`, `OLLAMA_PORT` | `8080`, `5432`, `11434`; change these for occupied ports and adjust curl/client URLs |
+| `POSTGRES_PASSWORD` | `iiot_dev`, local demo credential; database and user are `iiot` |
+| `SIMULATOR_ENABLED`, `SIMULATOR_MACHINE_COUNT` | `true`, `5` (range 1–1000) |
+| `SIMULATOR_INTERVAL_MS`, `SIMULATOR_ANOMALY_EVERY_TICKS`, `SIMULATOR_SEED` | `5000`, `12`, `42`; minimum interval 100 ms |
+| `RAG_INGEST_ON_STARTUP`, `RAG_BATCH_SIZE` | `true`, `16`; refresh bundled documents at startup |
+| `ALERTS_ENABLED`, `ALERTS_GMAIL_ENABLED` | `true`, `false` |
 
-Registers are integral values in the unsigned 16-bit range, stored in the numeric
-reading column. These are MODBUS-style holding-register samples, not a network
-MODBUS server. Anomalies alternate spike/dropout at the configured cadence, so
-default five-minute runs include both types without relying on chance alone.
-A dropout omits the temperature row for that batch, while other sensors continue;
-the sentinel and quality register provide explicit anomalous data points.
-Fault events use `SIMULATED_SPIKE` and `SIMULATED_DROPOUT` for ground truth.
-The following batch returns to normal. Energy does not accumulate simulated
-consumption for downtime. Batch writes and their events share one transaction.
-
-Automated tests cover 60 batches (five simulated minutes), register ranges,
-dropouts, spikes, and energy continuity after restart. A separate scheduler
-integration test starts the app with a 100 ms interval and verifies that readings
-and both anomaly types are committed automatically, without calling the generator
-from the test.
-
-After leaving the Compose app running for five minutes, inspect recent data:
+The AI override forces `RAG_ENABLED`, `AGENT_ENABLED`, and `MCP_ENABLED` on.
+For a telemetry-only run without model downloads, explicitly select the base file:
 
 ```sh
-docker compose exec postgres psql -U iiot -d iiot
+docker compose -f docker-compose.yml up --build -d --wait
 ```
 
-```sql
-SELECT metric_type, COUNT(*), MIN("value"), MAX("value")
-FROM telemetry.sensor_readings
-WHERE "timestamp" >= CURRENT_TIMESTAMP - INTERVAL '5 minutes'
-GROUP BY metric_type ORDER BY metric_type;
+Use the base `-f` on subsequent commands for that mode. Without a local `.env`,
+plain `docker compose up --build` also selects this lightweight mode. The full-stack
+instructions above intentionally opt in to models and require an MCP key.
 
-SELECT fault_code, COUNT(*) FROM telemetry.machine_events
-WHERE fault_code LIKE 'SIMULATED_%'
-  AND "timestamp" >= CURRENT_TIMESTAMP - INTERVAL '5 minutes'
-GROUP BY fault_code;
-```
-
-## Raw telemetry API
-
-Query machine status with `GET /api/machines/{id}/status`, time-bounded readings
-with `GET /api/machines/{id}/readings?from=...&to=...`, and recent statistical
-anomalies with `GET /api/anomalies`. See the [API reference](docs/telemetry-api.md)
-for filters, pagination, rolling baselines, response fields, and curl examples.
-The [detector evaluation](docs/anomaly-detection.md) measures precision and recall
-against simulator-injected faults across three seeds.
-New anomalies also produce automatic log alerts, normally within one second of
-committing a reading. Enable Gmail email delivery with `ALERTS_GMAIL_ENABLED=true`
-and account/recipient settings. See [alerting and Gmail setup](docs/alerting.md).
-
-## Sample equipment documents
-
-The [synthetic equipment corpus](docs/equipment-corpus.md) contains ten Markdown
-documents for RAG: five equipment manuals, three maintenance logs, an error-code
-reference, and a telemetry register guide. Sources include machine metadata,
-cross-references, and distinct troubleshooting cases. The corpus index includes
-retrieval evaluation prompts for the later pipeline.
-
-## Embedding ingestion and similarity search
-
-The [RAG ingestion guide](docs/rag-ingestion.md) explains how to enable Spring AI
-with pgvector and the local `nomic-embed-text:v1.5` model. With `RAG_ENABLED=true`,
-startup embeds the bundled equipment corpus. `POST /api/documents/ingest`
-refreshes it, and `GET /api/documents/search?query=...` returns matching chunks
-with similarity scores and source metadata. RAG is disabled by default for H2.
-
-## Grounded equipment answers
-
-With RAG enabled and the chat model downloaded, `POST /api/rag/query` accepts
-`{"question":"what does error E204 mean"}` and returns an answer with checked
-source quotes and citations. Unknown codes return an insufficient-evidence
-response. See the [RAG query guide](docs/rag-query.md) for setup and examples.
-
-With `AGENT_ENABLED=true` and RAG enabled, `POST /api/agent/chat` lets the model
-select telemetry queries, document retrieval, both, or neither. Answers include
-the executed tool evidence and citation labels. See the [agent guide](docs/agent-chat.md)
-for machine lookup, configuration, limits, and live routing checks.
-Reuse the returned `conversationId` in subsequent requests to carry machine and
-metric context into follow-ups such as “and what about last week?”. Memory keeps
-up to six recent turns and expires after 30 minutes idle; see the guide for details.
-
-## MCP tools
-
-With `MCP_ENABLED=true` and a configured `MCP_API_KEY`, MCP clients can connect over Streamable HTTP at `/mcp`
-to list and call `getMachineStatus`, `getRecentAnomalies`, and `ragQuery`. Enable
-RAG to use the knowledge tool; the agent is not required. Each MCP request must
-send `Authorization: Bearer <MCP_API_KEY>`; unauthenticated requests return 401.
-The shared key grants access to the three read-only tools. See the
-[MCP server guide](docs/mcp-server.md) for setup, Inspector commands, and automated
-client acceptance tests.
-
-## Interview demo
-
-Run `python3 scripts/demo.py` for a bounded, isolated demo of grounded answers,
-multi-turn memory, anomaly detection, and authenticated MCP. It uses clearly
-labeled deterministic model/retrieval fixtures with real application services.
-See [demo setup and the interview walkthrough](docs/interview-demo.md) for
-one-time dependency preparation and the distinction from live Ollama evaluation.
-
-## Verify
+PostgreSQL data, alert delivery state, and model blobs persist in named volumes.
+Changing `POSTGRES_PASSWORD` does not change a password already stored in an existing
+database. Bundled documents are packaged in the app image; rebuild after editing
+them. Startup ingestion replaces the equipment corpus transactionally.
 
 ```sh
-./mvnw verify
+docker compose stop                  # Stop containers, retain everything.
+docker compose up -d --wait --wait-timeout 900  # Resume.
+docker compose down                  # Remove containers/network, keep volumes.
 ```
 
-On Windows, use `mvnw.cmd` instead of `./mvnw`.
+Only use `docker compose down --volumes` when you deliberately want to erase
+telemetry, alerts, document vectors, and downloaded models.
 
-## Continuous integration
+| Symptom | Check / fix |
+| --- | --- |
+| Port already allocated | Change the relevant port in `.env`; preserve it for every invocation |
+| Required MCP key / invalid key | Generate the key above; it must be 32–256 bearer-token characters with no whitespace |
+| `models` exits nonzero | `docker compose logs models ollama`; check network, disk, and model names, then rerun `up` |
+| App never becomes healthy | `docker compose logs app`; inspect database connectivity, model availability, and ingestion failure |
+| `vector` extension missing in an older database | Run `docker compose exec postgres psql -U iiot -d iiot -c 'CREATE EXTENSION IF NOT EXISTS vector;'`, then restart the app |
+| `/api/agent/chat` or `/mcp` returns 404 | Check `docker compose config --services` includes `models`; use the AI override |
+| HTTP 503 on knowledge/chat | Inspect app/Ollama logs; confirm both models with `docker compose exec ollama ollama list` |
+| HTTP 200 with insufficient evidence | Inspect returned evidence and retrieval matches; see the live-model limitation above |
+| Timed demo fails offline | Run the one-time Maven preparation below before rehearsing |
 
-[CI](.github/workflows/ci.yml) builds and runs all tests with Java 21 and the Maven
-Wrapper on every push and pull request. It also supports manual runs from GitHub
-Actions. Maven dependencies are cached between runs. The full suite uses embedded
-H2 and a local HTTP test server. CI also runs migration, constraint, and simulator tests against
-a PostgreSQL 17 service container; no Ollama model is required.
+## Local development, tests, and interview demo
 
-The badge tracks push builds on `main`. Its repository URL is provisionally
-`ParvezHossain/iiot-powered-by-ai`; update both badge links if the destination
-differs. A passing badge requires publishing the project and a successful GitHub
-Actions run; no remote is configured yet.
+For an H2 telemetry-only development server, install JDK 21+ and run
+`./mvnw spring-boot:run` (`mvnw.cmd` on Windows). No PostgreSQL or Ollama is needed;
+H2 data and chat memory disappear on shutdown. The first build downloads Maven
+and dependencies. `./mvnw verify` runs the automated suite without a live model;
+CI additionally checks PostgreSQL/pgvector persistence and runs the demo script.
 
-## License
+For the under-two-minute interview replay, use Linux/macOS/WSL, Python 3, and JDK
+21+. Prepare once, then run the single command:
 
-[MIT](LICENSE).
+```sh
+./mvnw --batch-mode --no-transfer-progress -Dtest=InterviewDemoTests test
+python3 scripts/demo.py
+```
+
+The second command runs offline, starts isolated temporary services, verifies data,
+knowledge, mixed questions, three-turn memory, authenticated MCP, and automatic
+alerts, then prints a transcript. It uses **scripted model/retrieval fixtures** with
+real application services and never sends Gmail. Three consecutive rehearsals took
+26.7, 20.9, and 20.8 seconds; first-time preparation and live model calls are
+outside the time bound.
+
+## Further detail
+
+| Topic | Reference |
+| --- | --- |
+| Schema, measurements, and events | [Schema and ERD](docs/telemetry-schema.md), [telemetry API](docs/telemetry-api.md) |
+| Rolling detector, precision/recall | [Anomaly detection](docs/anomaly-detection.md) |
+| Synthetic manuals and maintenance logs | [Corpus](docs/equipment-corpus.md) |
+| Chunking, embeddings, source validation | [Ingestion](docs/rag-ingestion.md), [grounded answers](docs/rag-query.md) |
+| Tool routing, bounds, memory, live checks | [Agent](docs/agent-chat.md) |
+| MCP protocol, tools, auth scope | [MCP server](docs/mcp-server.md) |
+| Gmail setup, retries, delivery limitations | [Alerting](docs/alerting.md) |
+| Demo fixtures and walkthrough | [Interview demo](docs/interview-demo.md) |
+| Fresh-start verification and live-model results | [T6.1 verification](docs/t6.1-verification.md) |
+
+[MIT license](LICENSE).

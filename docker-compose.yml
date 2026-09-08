@@ -1,3 +1,5 @@
+# Base stack: telemetry and log alerts, with AI features opt-in.
+# For automatic model setup + RAG/chat/MCP, see .env.example and README.md.
 services:
   postgres:
     image: pgvector/pgvector:pg17

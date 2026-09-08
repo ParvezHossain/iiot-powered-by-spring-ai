@@ -1,0 +1,41 @@
+# Full-stack override: docker compose -f docker-compose.yml -f docker-compose.ai.yml up --build
+services:
+  models:
+    image: ollama/ollama:latest
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      AGENT_MODEL: ${AGENT_MODEL:-qwen2.5:1.5b}
+      RAG_ANSWER_MODEL: ${RAG_ANSWER_MODEL:-qwen2.5:1.5b}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        ensure_model() {
+          if ollama show "$$1" >/dev/null 2>&1; then
+            echo "Using installed model: $$1"
+          else
+            ollama pull "$$1"
+          fi
+        }
+        ensure_model nomic-embed-text:v1.5
+        ensure_model "$$AGENT_MODEL"
+        if [ "$$RAG_ANSWER_MODEL" != "$$AGENT_MODEL" ]; then
+          ensure_model "$$RAG_ANSWER_MODEL"
+        fi
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    environment:
+      RAG_ENABLED: "true"
+      AGENT_ENABLED: "true"
+      MCP_ENABLED: "true"
+      MCP_API_KEY: ${MCP_API_KEY:?Set MCP_API_KEY to a random token of at least 32 characters; see README.md}
+    depends_on:
+      models:
+        condition: service_completed_successfully
+    healthcheck:
+      # Corpus embedding on CPU can take longer than a telemetry-only startup.
+      start_period: 180s
+      retries: 60
