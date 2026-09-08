@@ -36,6 +36,7 @@ services:
       models:
         condition: service_completed_successfully
     healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health/readiness"]
       # Corpus embedding on CPU can take longer than a telemetry-only startup.
       start_period: 180s
       retries: 60
