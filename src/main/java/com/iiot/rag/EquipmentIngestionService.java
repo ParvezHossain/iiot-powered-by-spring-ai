@@ -1,5 +1,6 @@
 package com.iiot.rag;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.io.IOException;
 
 import org.slf4j.Logger;
@@ -43,5 +44,8 @@ public class EquipmentIngestionService {
         return new IngestionResult(documents, chunks.size(), RagProperties.MODEL);
     }
 
-    public record IngestionResult(int documents, int chunks, String model) {}
+    @Schema(name = "EquipmentIngestionResult", description = "Completed corpus replacement counts.")
+    public record IngestionResult(@Schema(description = "Number of source documents loaded") int documents,
+            @Schema(description = "Number of embedded chunks stored") int chunks,
+            @Schema(description = "Embedding model identifier") String model) {}
 }

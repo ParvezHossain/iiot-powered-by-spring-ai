@@ -1,5 +1,6 @@
 package com.iiot.agent;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -312,8 +313,16 @@ public class AgentService {
         return new Answer(message, true, List.of(), List.copyOf(evidence));
     }
 
-    public record Evidence(String id, String tool, boolean success, String result) {}
+    @Schema(name = "AgentEvidence", description = "Result of a tool call made during the answer.")
+    public record Evidence(@Schema(description = "Evidence label referenced by evidenceIds") String id,
+            @Schema(description = "Invoked tool name") String tool,
+            @Schema(description = "Whether the tool call succeeded") boolean success,
+            @Schema(description = "Serialized tool result or failure detail") String result) {}
     public record Answer(String answer, boolean insufficientEvidence, List<String> evidenceIds, List<Evidence> evidence) {}
-    public record ConversationAnswer(java.util.UUID conversationId, String answer, boolean insufficientEvidence,
-                                     List<String> evidenceIds, List<Evidence> evidence) {}
+    @Schema(name = "AgentConversationAnswer", description = "Agent response and evidence for a conversation turn.")
+    public record ConversationAnswer(@Schema(description = "Reuse this UUID for follow-up questions") java.util.UUID conversationId,
+            @Schema(description = "Generated answer or explanation of insufficient evidence") String answer,
+            @Schema(description = "True when a supported answer could not be produced") boolean insufficientEvidence,
+                                     @Schema(description = "Validated labels used by the answer") List<String> evidenceIds,
+            @Schema(description = "Tool call results collected during this turn") List<Evidence> evidence) {}
 }

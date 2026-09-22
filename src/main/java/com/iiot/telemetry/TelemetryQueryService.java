@@ -1,5 +1,6 @@
 package com.iiot.telemetry;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
@@ -106,8 +107,31 @@ public class TelemetryQueryService {
                 rs.getObject("timestamp", OffsetDateTime.class));
     }
 
-    public record Reading(long id, UUID machineId, String metricType, double value, OffsetDateTime timestamp) {}
-    public record MachineStatus(UUID id, String name, String location, String status, List<Reading> latestReadings) {}
-    public record Baseline(int sampleCount, double mean, double standardDeviation, double scale, double zScore, double threshold) {}
-    public record Anomaly(Reading reading, String reason, Baseline baseline) {}
+    @Schema(name = "TelemetryReading", description = "One persisted sensor measurement.")
+    public record Reading(
+            @Schema(description = "Database reading ID") long id,
+            @Schema(description = "Owning machine UUID") UUID machineId,
+            @Schema(description = "Metric name, e.g. temperature_celsius, vibration_mm_s, or modbus_hr_40001") String metricType,
+            @Schema(description = "Measured value in the units identified by metricType") double value,
+            @Schema(description = "Measurement time with UTC offset") OffsetDateTime timestamp) {}
+    @Schema(name = "MachineStatus", description = "Machine metadata with the newest reading for each metric.")
+    public record MachineStatus(
+            @Schema(description = "Machine UUID") UUID id,
+            @Schema(description = "Display name, e.g. SIM-001") String name,
+            @Schema(description = "Configured machine location") String location,
+            @Schema(description = "Stored machine status") String status,
+            @Schema(description = "Latest reading per metric; empty when no readings exist") List<Reading> latestReadings) {}
+    @Schema(name = "AnomalyBaseline", description = "Rolling baseline from preceding samples, excluding the anomalous reading.")
+    public record Baseline(
+            @Schema(description = "Number of preceding baseline samples (10–30)") int sampleCount,
+            @Schema(description = "Baseline arithmetic mean") double mean,
+            @Schema(description = "Sample standard deviation") double standardDeviation,
+            @Schema(description = "Standard deviation with the metric-specific noise floor applied") double scale,
+            @Schema(description = "Signed deviation divided by scale") double zScore,
+            @Schema(description = "Absolute z-score threshold, currently 4.0") double threshold) {}
+    @Schema(name = "TelemetryAnomaly", description = "Detected statistical deviation or sensor dropout.")
+    public record Anomaly(
+            @Schema(description = "Reading that triggered detection") Reading reading,
+            @Schema(description = "HIGH_TEMPERATURE, LOW_TEMPERATURE, HIGH_VIBRATION, LOW_VIBRATION, or SENSOR_DROPOUT") String reason,
+            @Schema(description = "Rolling statistics; null for SENSOR_DROPOUT") Baseline baseline) {}
 }

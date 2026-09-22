@@ -19,6 +19,22 @@ class IiotPoweredByAiApplicationTests {
 	@LocalServerPort
 	private int port;
 
+    @Test
+    void defaultDocumentationIncludesTelemetryAndHealthButNotDisabledAi() throws Exception {
+        try (var client = HttpClient.newHttpClient()) {
+            var response = client.send(HttpRequest.newBuilder(
+                    URI.create("http://localhost:" + port + "/v3/api-docs")).GET().build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertThat(response.statusCode()).isEqualTo(200);
+            var paths = JsonMapper.builder().build().readTree(response.body()).path("paths");
+            assertThat(paths.has("/api/machines/{id}/status")).isTrue();
+            assertThat(paths.has("/actuator/health")).isTrue();
+            assertThat(paths.has("/api/rag/query")).isFalse();
+            assertThat(paths.has("/api/agent/chat")).isFalse();
+            assertThat(paths.has("/api/documents/search")).isFalse();
+        }
+    }
+
 	@Test
 	void healthEndpointReportsUp() throws Exception {
 		try (var client = HttpClient.newHttpClient()) {

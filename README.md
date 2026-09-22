@@ -129,6 +129,14 @@ without contacting the model registry. To update an installed chat model explici
 run `docker compose exec ollama ollama pull qwen2.5:1.5b` (substitute your configured
 model), then restart the app.
 
+### Swagger API documentation
+
+Open [Swagger UI](http://localhost:8080/swagger-ui/index.html) to explore and call
+the enabled APIs. Download the specification as [JSON](http://localhost:8080/v3/api-docs)
+or [YAML](http://localhost:8080/v3/api-docs.yaml). See the
+[API documentation guide](docs/swagger-api.md) for endpoint coverage, feature flags,
+MCP authentication, and configuration.
+
 ### Try the system
 
 The default simulator creates `SIM-001` through `SIM-005`, with readings every

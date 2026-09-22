@@ -1,5 +1,6 @@
 package com.iiot.rag;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -152,7 +153,16 @@ public class RagAnswerService {
                 "Document retrieval or the local language model is unavailable", cause);
     }
 
-    public record Answer(String answer, boolean insufficientEvidence, List<Citation> citations) {}
-    public record Citation(String sourceId, String chunkId, Object documentId, Object source,
-                           Object section, String quote, Double score) {}
+    @Schema(name = "RagAnswer", description = "Grounded answer or an explicit insufficient-evidence response.")
+    public record Answer(@Schema(description = "Generated answer or explanation of missing evidence") String answer,
+            @Schema(description = "True when retrieval or citation validation cannot support an answer") boolean insufficientEvidence,
+            @Schema(description = "Validated source quotes; empty when evidence is insufficient") List<Citation> citations) {}
+    @Schema(name = "RagCitation", description = "Server-resolved citation to an equipment chunk.")
+    public record Citation(@Schema(description = "Answer-local source label, e.g. S1") String sourceId,
+            @Schema(description = "Retrieved vector document ID") String chunkId,
+            @Schema(description = "Original document ID from metadata") Object documentId,
+            @Schema(description = "Source filename from metadata") Object source,
+                           @Schema(description = "Source section heading from metadata") Object section,
+            @Schema(description = "Validated verbatim source excerpt") String quote,
+            @Schema(description = "Retrieval similarity score, when available") Double score) {}
 }
