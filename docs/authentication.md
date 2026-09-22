@@ -13,10 +13,10 @@ Spring Boot does **not** load `.env` for host execution.
 
 | Environment variable | Default / requirement |
 | --- | --- |
-| `AUTH_JWT_SECRET` | Required on every startup; Base64 of at least 32 random bytes. Generate with `openssl rand -base64 32`. Never use the MCP key. |
-| `INITIAL_ADMIN_USERNAME` | Required when no ADMIN exists; 3–64 ASCII letters, digits, dots, underscores or hyphens. |
-| `INITIAL_ADMIN_EMAIL` | Required when no ADMIN exists; valid email, at most 254 characters. |
-| `INITIAL_ADMIN_PASSWORD` | Required when no ADMIN exists; at least 12 characters, at most 72 UTF-8 bytes. |
+| `AUTH_JWT_SECRET` | Required on every startup; Base64 of at least 32 random bytes. Generate with `openssl rand -base64 32`. MCP uses this same JWT authentication. |
+| `AUTH_INITIAL_ADMIN_USERNAME` | Required when no ADMIN exists; 3–64 ASCII letters, digits, dots, underscores or hyphens. |
+| `AUTH_INITIAL_ADMIN_EMAIL` | Required when no ADMIN exists; valid email, at most 254 characters. |
+| `AUTH_INITIAL_ADMIN_PASSWORD` | Required when no ADMIN exists; at least 12 characters, at most 72 UTF-8 bytes. |
 | `AUTH_ISSUER` | `iiot-api`; must match signed access tokens. |
 | `AUTH_AUDIENCE` | `iiot-spa`; must match signed access tokens. |
 | `AUTH_ACCESS_TTL` | `PT15M`; positive duration, maximum one hour. |
@@ -60,10 +60,19 @@ so username-or-email login has an unambiguous namespace. Passwords are not trimm
 | GET | `/api/admin/users?limit=100&offset=0` | ADMIN; paginated array, maximum 100 users. |
 | PUT | `/api/admin/users/{id}/role` | ADMIN; body `{"role":"USER"}` or `{"role":"ADMIN"}`. |
 | PUT | `/api/admin/users/{id}/status` | ADMIN; body `{"enabled":false}` or `{"enabled":true}`. |
-| POST | `/api/documents/ingest` | ADMIN; existing ingestion operation. |
+| GET/POST | `/api/documents/**` | ADMIN; document search and ingestion. |
+| POST | `/api/rag/query`, `/api/agent/chat` | ADMIN; questions, chat and agent tool execution. |
 | GET/POST | Other business APIs | Authentication required by default. |
 | GET | Health and Swagger/OpenAPI routes | Explicitly public. |
-| Any | `/mcp` | Existing separate shared bearer key and MCP transport checks. JWTs do not grant MCP access; the MCP key does not grant REST access. |
+| Any | `/mcp` | ADMIN JWT on every protocol request, including tool discovery/calls and session deletion. Shared API keys are no longer accepted. |
+
+AI REST routes remain visible in Swagger even when their services are disabled;
+ADMIN callers then receive 503. Set `RAG_ENABLED=true` and `AGENT_ENABLED=true`
+with PostgreSQL/pgvector and Ollama configured to execute them. `/mcp` is documented
+with JSON-RPC examples under **MCP tool calling**; set `MCP_ENABLED=true` to register
+the SDK servlet. Tool discovery/execution is available through MCP and agent chat.
+Telemetry REST access remains available to USER and ADMIN. Normal registration
+creates USER accounts and therefore does not grant access to any AI feature.
 
 New public routes must be deliberately added to `SecurityConfiguration`. New roles
 can be added to `AuthRepository.Role` and to standard Spring Security policies;
@@ -232,7 +241,7 @@ unchanged. H2 and PostgreSQL use the same migration; JPA does not create the sch
 | `auth/AdminUserController`, `AdminUserService` | Authorized user administration and immediate session invalidation. |
 | `auth/InitialAdminInitializer`, `AuthRateLimitFilter` | Serialized bootstrap and bounded peer throttling. |
 | `agent/ConversationMemory` | Authenticated conversation ownership. |
-| `config/OpenApiConfiguration` | Bearer scheme and default API security documentation. |
+| `config/OpenApiConfiguration`, `config/McpOpenApiConfiguration` | Bearer scheme, AI routes, public health and explicit MCP protocol/tool examples. |
 | `pom.xml` | Boot-managed Resource Server and Spring Security test dependencies. |
 | `application.properties`, `.env.example`, `docker-compose.yml` | Environment-driven authentication configuration and container forwarding. |
 | `AuthenticationTests`, `AuthRateLimitFilterTests`, `AuthConfigurationTests`, `application-default.properties` | Auth integration/rate-limit tests and test-only credentials. |
@@ -269,10 +278,15 @@ The deterministic `python3 scripts/demo.py` obtains its own test tokens.
 Implementation references: [Spring Security JWT resource server](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html)
 and [password storage](https://docs.spring.io/spring-security/reference/features/authentication/password-storage.html).
 
-Verification performed for this change (Java 21): the complete regression run
-passed 116 tests with the optional live pgvector ingestion test skipped. After the
-final logout/Swagger refinements, all 35 focused auth/configuration/documentation
-checks passed and the application JAR packaged successfully. All 28 authentication
-integration tests also passed against an isolated PostgreSQL 17 database, including
-refresh and bootstrap concurrency. Compose configuration and Python helper syntax
-checks passed. The disposable database was removed after verification.
+Verification (Java 21): the completed ADMIN-only AI/MCP follow-up and configuration
+fixes passed the full suite: 122 tests passed, with one optional live pgvector
+ingestion test skipped. The application JAR packaged successfully. Tests verify
+ADMIN AI access, USER denial before model/tool execution, MCP SDK discovery and
+calls using ADMIN JWTs, rejection of USERs with valid MCP session IDs, Swagger
+visibility with disabled features, model-property binding and bootstrap behavior.
+Compose also validates without a legacy MCP key or bootstrap credentials (the
+application still requires bootstrap credentials when no ADMIN exists).
+
+The original authentication implementation additionally passed 28 integration tests
+against an isolated PostgreSQL 17 database, including refresh/bootstrap concurrency;
+that disposable database was removed after verification.

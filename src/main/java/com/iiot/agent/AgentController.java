@@ -1,5 +1,8 @@
 package com.iiot.agent;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+import org.jspecify.annotations.Nullable;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -9,18 +12,18 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "Agent chat", description = "Conversational telemetry and equipment assistance. Requires agent.enabled=true and rag.enabled=true.")
+@Tag(name = "Agent chat", description = "Conversational telemetry and equipment assistance. ADMIN only. Requires agent.enabled=true and rag.enabled=true for execution.")
 @RestController
-@ConditionalOnProperty(name = {"agent.enabled", "rag.enabled"}, havingValue = "true")
+@ApiResponse(responseCode = "401", description = "Missing or invalid JWT")
+@ApiResponse(responseCode = "403", description = "ADMIN role required")
 public class AgentController {
-    private final AgentService agent;
+    private final @Nullable AgentService agent;
 
-    public AgentController(AgentService agent) {
+    public AgentController(@Nullable AgentService agent) {
         this.agent = agent;
     }
 
@@ -31,6 +34,8 @@ public class AgentController {
     @ApiResponse(responseCode = "503", description = "Required AI service is unavailable", content = @Content)
     @PostMapping("/api/agent/chat")
     public AgentService.ConversationAnswer chat(@Valid @RequestBody Question request) {
+        if (agent == null) throw new ResponseStatusException(
+                HttpStatus.SERVICE_UNAVAILABLE, "Agent is disabled; enable RAG_ENABLED and AGENT_ENABLED");
         return agent.chat(request.question().strip(), request.conversationId());
     }
 

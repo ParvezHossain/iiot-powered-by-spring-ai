@@ -24,21 +24,17 @@ class EquipmentMcpWiringTests {
     @Test
     void serverIsOptInAndDoesNotRequireTheAgentOrRagToStart() {
         context.run(ctx -> assertThat(ctx).hasNotFailed().doesNotHaveBean(McpSyncServer.class));
-        context.withPropertyValues("mcp.enabled=true", "rag.enabled=false", "agent.enabled=false",
-                        "mcp.api-key=mcp-test-only-key-0123456789abcdef0123456789")
+        context.withPropertyValues("mcp.enabled=true", "rag.enabled=false", "agent.enabled=false")
                 .run(ctx -> assertThat(ctx).hasNotFailed().hasSingleBean(McpSyncServer.class)
                         .hasBean("equipmentMcpServlet"));
     }
 
     @Test
-    void enabledServerFailsClosedWithoutAUsableKey() {
-        for (String key : new String[]{"", " ", "short", "contains spaces even if sufficiently long"}) {
-            context.withPropertyValues("mcp.enabled=true", "mcp.api-key=" + key).run(ctx -> {
-                assertThat(ctx).hasFailed();
-                assertThat(ctx.getStartupFailure()).hasRootCauseInstanceOf(IllegalArgumentException.class)
-                        .hasStackTraceContaining("MCP_API_KEY must contain");
-            });
-        }
+    void enabledServerUsesApplicationJwtSecurityWithoutASharedKeyFilter() {
+        context.withPropertyValues("mcp.enabled=true").run(ctx -> {
+            assertThat(ctx).hasNotFailed().hasSingleBean(McpSyncServer.class);
+            assertThat(ctx).doesNotHaveBean("equipmentMcpAuthentication");
+        });
     }
 
     @Test

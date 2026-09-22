@@ -12,7 +12,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -67,17 +66,7 @@ public class SecurityConfiguration {
         return decoder;
     }
 
-    // MCP's existing highest-precedence filter validates its own service credential.
     @Bean
-    @Order(1)
-    SecurityFilterChain mcpSecurity(HttpSecurity http) throws Exception {
-        return http.securityMatcher("/mcp", "/mcp/**").csrf(c -> c.disable())
-                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(a -> a.anyRequest().permitAll()).build();
-    }
-
-    @Bean
-    @Order(2)
     SecurityFilterChain apiSecurity(HttpSecurity http, AuthRepository users, AuthProperties p,
                                     @org.springframework.beans.factory.annotation.Value("${auth.requests-per-minute:30}") int rateLimit) throws Exception {
         var cors = new CorsConfiguration();
@@ -93,10 +82,34 @@ public class SecurityConfiguration {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .requestCache(c -> c.disable())
                 .authorizeHttpRequests(a -> a.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**", "/v3/api-docs", "/v3/api-docs/**", "/v3/api-docs.yaml", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                        .requestMatchers("/api/admin/**", "/api/documents/ingest").hasRole("ADMIN")
-                        .anyRequest().authenticated())
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/auth/register",
+                                "/api/auth/login",
+                                "/api/auth/refresh",
+                                "/api/auth/logout"
+                        )
+                        .permitAll()
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/actuator/health",
+                                "/actuator/health/**",
+                                "/v3/api-docs",
+                                "/v3/api-docs/**",
+                                "/v3/api-docs.yaml",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html"
+                        ).permitAll()
+                        .requestMatchers(
+                                "/api/admin/**",
+                                "/api/documents/**",
+                                "/api/rag/**",
+                                "/api/agent/**",
+                                "/mcp",
+                                "/mcp/**"
+                        ).hasRole("ADMIN")
+                        .anyRequest()
+                        .authenticated())
                 .exceptionHandling(e -> e.authenticationEntryPoint((q, r, x) -> error(r, 401, "Authentication required"))
                         .accessDeniedHandler((q, r, x) -> error(r, 403, "Access denied")))
                 .oauth2ResourceServer(o -> o.bearerTokenResolver(request -> {

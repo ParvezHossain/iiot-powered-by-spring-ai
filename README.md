@@ -1,11 +1,11 @@
 # IIoT Powered by AI
 
 > **Authentication setup:** REST APIs now require JWT bearer tokens. Before starting,
-> set `AUTH_JWT_SECRET` and the three `INITIAL_ADMIN_*` values in `.env` (Docker)
+> set `AUTH_JWT_SECRET` and the three `AUTH_INITIAL_ADMIN_*` values in `.env` (Docker)
 > or your shell environment (host execution). Follow [Authentication](docs/authentication.md)
 > for registration/login, token refresh, admin APIs and complete configuration.
 > Obtain `ACCESS_TOKEN` using that guide before running the business API examples below.
-> Health and Swagger remain public; MCP continues to use its separate `MCP_API_KEY`.
+> Health and Swagger remain public. RAG, chat, document search and MCP require ADMIN JWTs.
 
 
 [![CI](https://github.com/ParvezHossain/iiot-powered-by-ai/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/ParvezHossain/iiot-powered-by-ai/actions/workflows/ci.yml)
@@ -35,7 +35,7 @@ flowchart TD
     REST --> RAG[RAG answer and citation validation]
     RAG --> Retrieve
     RAG <--> Chat
-    MCPClient[MCP-compatible client] --> Auth[Bearer key filter]
+    MCPClient[MCP-compatible client] --> Auth[ADMIN JWT authentication]
     Auth --> MCP[MCP Java SDK /mcp]
     MCP -->|Status and anomalies| Query
     MCP --> RAG
@@ -98,12 +98,11 @@ Prepare the local configuration once:
 
 ```sh
 cp .env.example .env
-printf '\nMCP_API_KEY=%s\n' "$(openssl rand -hex 32)" >> .env
 ```
 
 If `.env` already exists, edit it instead of overwriting it. It is ignored by Git.
 The example selects both Compose files using `COMPOSE_FILE`; the AI override
-requires your generated key and enables RAG, chat, and MCP. For native Windows
+enables RAG, chat, and MCP. Configure the JWT secret and initial ADMIN as described above. For native Windows
 Compose, use `;` as the file separator or pass both files with `-f` explicitly.
 
 Start everything with one command:
@@ -214,9 +213,9 @@ after changing models. Keep the embedding model fixed to preserve vector compati
 ### Connect MCP
 
 Configure a client for **Streamable HTTP**, URL `http://localhost:8080/mcp`, and
-header `Authorization: Bearer <the MCP_API_KEY from your .env>`. Expect
+header `Authorization: Bearer <ADMIN access token from /api/auth/login>`. Expect
 `getMachineStatus`, `getRecentAnomalies`, and `ragQuery`. This is not a stdio or
-legacy SSE server. The shared key grants all three read-only tools for all machines.
+legacy SSE server. ADMIN JWTs grant all three read-only tools for all machines.
 
 Without credentials, this must return HTTP 401:
 
@@ -226,15 +225,14 @@ curl -i http://localhost:8080/mcp
 
 For client discovery/calls without an LLM, the optional
 [MCP Inspector](https://github.com/modelcontextprotocol/inspector) requires
-Node/npm. Enter the same key when prompted, then list tools:
+Node/npm. Log in as ADMIN to obtain `ACCESS_TOKEN`, then list tools:
 
 ```sh
-read -rs -p 'MCP API key from .env: ' MCP_API_KEY; echo
 npx @modelcontextprotocol/inspector --cli http://localhost:8080/mcp --transport http \
-  --header "Authorization: Bearer $MCP_API_KEY" --method tools/list
+  --header "Authorization: Bearer $ACCESS_TOKEN" --method tools/list
 ```
 
-REST/chat require user JWTs; the separate MCP service key applies only to `/mcp`.
+RAG, chat, documents and MCP require ADMIN JWTs. USERs retain telemetry access.
 Compose binds all published ports to localhost. This is a local demo deployment,
 not a public multi-tenant service.
 
@@ -285,7 +283,7 @@ docker compose -f docker-compose.yml up --build -d --wait
 
 Use the base `-f` on subsequent commands for that mode. Without a local `.env`,
 plain `docker compose up --build` also selects this lightweight mode. The full-stack
-instructions above intentionally opt in to models and require an MCP key.
+instructions above intentionally opt in to models; AI and MCP calls require ADMIN JWTs.
 
 PostgreSQL data, alert delivery state, and model blobs persist in named volumes.
 Changing `POSTGRES_PASSWORD` does not change a password already stored in an existing
@@ -303,15 +301,40 @@ telemetry, alerts, document vectors, and downloaded models.
 
 | Symptom | Check / fix |
 | --- | --- |
+| Docker Hub returns 401 while loading `eclipse-temurin` metadata | Retry the base-image pulls and rebuild using the steps below |
 | Port already allocated | Change the relevant port in `.env`; preserve it for every invocation |
-| Required MCP key / invalid key | Generate the key above; it must be 32–256 bearer-token characters with no whitespace |
+| MCP returns 401 / 403 | Log in for a fresh ADMIN access token; USER accounts cannot call MCP |
 | `models` exits nonzero | `docker compose logs models ollama`; check network, disk, and model names, then rerun `up` |
 | App never becomes healthy | `docker compose logs app`; inspect database connectivity, model availability, and ingestion failure |
 | `vector` extension missing in an older database | Run `docker compose exec postgres psql -U iiot -d iiot -c 'CREATE EXTENSION IF NOT EXISTS vector;'`, then restart the app |
-| `/api/agent/chat` or `/mcp` returns 404 | Check `docker compose config --services` includes `models`; use the AI override |
+| Chat/RAG returns 503 or MCP returns 404 | Enable the corresponding feature flags; use the AI override with PostgreSQL/pgvector and Ollama |
 | HTTP 503 on knowledge/chat | Inspect app/Ollama logs; confirm both models with `docker compose exec ollama ollama list` |
 | HTTP 200 with insufficient evidence | Inspect returned evidence and retrieval matches; see the live-model limitation above |
 | Timed demo fails offline | Run the one-time Maven preparation below before rehearsing |
+
+### Docker Hub 401 during image build
+
+A failure while loading metadata for `eclipse-temurin:21-jdk` or
+`eclipse-temurin:21-jre` occurs before Java compilation and application startup.
+First retry the public base-image pulls, then rebuild and start the stack:
+
+```sh
+docker pull eclipse-temurin:21-jdk
+docker pull eclipse-temurin:21-jre
+docker compose build app
+docker compose up -d --wait --wait-timeout 900
+```
+
+Transient registry/network failures can clear on retry. If either pull still
+returns 401, run `docker login` and retry using the same user and Docker context.
+If login succeeds but pulls still fail, check VPN/proxy access and Docker daemon
+network configuration. Application `AUTH_*` settings do not control image pulls.
+
+An unauthenticated registry request can normally return a 401 bearer challenge;
+Docker must complete the token exchange before fetching the image manifest.
+See [Docker registry authentication](https://docs.docker.com/reference/api/registry/auth/),
+[Docker login](https://docs.docker.com/reference/cli/docker/login/), and the
+[detailed troubleshooting guide](run.md#docker-hub-401-while-loading-java-base-image-metadata).
 
 ## Local development, tests, and interview demo
 

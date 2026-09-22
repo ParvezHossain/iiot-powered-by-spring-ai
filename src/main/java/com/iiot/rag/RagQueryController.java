@@ -1,5 +1,8 @@
 package com.iiot.rag;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+import org.jspecify.annotations.Nullable;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -9,18 +12,18 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "Grounded answers", description = "Answers with validated source quotes. Requires rag.enabled=true.")
+@Tag(name = "Grounded answers", description = "Answers with validated source quotes. ADMIN only. Requires rag.enabled=true for execution.")
 @RestController
-@ConditionalOnProperty(name = "rag.enabled", havingValue = "true")
+@ApiResponse(responseCode = "401", description = "Missing or invalid JWT")
+@ApiResponse(responseCode = "403", description = "ADMIN role required")
 public class RagQueryController {
-    private final RagAnswerService answers;
+    private final @Nullable RagAnswerService answers;
 
-    public RagQueryController(RagAnswerService answers) {
+    public RagQueryController(@Nullable RagAnswerService answers) {
         this.answers = answers;
     }
 
@@ -31,6 +34,8 @@ public class RagQueryController {
     @ApiResponse(responseCode = "503", description = "Required AI service is unavailable", content = @Content)
     @PostMapping("/api/rag/query")
     public RagAnswerService.Answer query(@Valid @RequestBody Question request) {
+        if (answers == null) throw new ResponseStatusException(
+                HttpStatus.SERVICE_UNAVAILABLE, "RAG is disabled; enable RAG_ENABLED");
         return answers.answer(request.question().strip());
     }
 

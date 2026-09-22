@@ -1,11 +1,11 @@
 # Run and Explore IIoT Powered by AI
 
 > **Authentication setup:** REST APIs now require JWT bearer tokens. Before starting,
-> set `AUTH_JWT_SECRET` and the three `INITIAL_ADMIN_*` values in `.env` (Docker)
+> set `AUTH_JWT_SECRET` and the three `AUTH_INITIAL_ADMIN_*` values in `.env` (Docker)
 > or your shell environment (host execution). Follow [Authentication](docs/authentication.md)
 > for registration/login, token refresh, admin APIs and complete configuration.
 > Obtain `ACCESS_TOKEN` using that guide before running the business API examples below.
-> Health and Swagger remain public; MCP continues to use its separate `MCP_API_KEY`.
+> Health and Swagger remain public. RAG, chat, document search and MCP require ADMIN JWTs.
 
 
 Start with sections 1–8 to get the full stack running. Continue through the lab in
@@ -50,7 +50,7 @@ start exploring through curl and Swagger UI.
 curl / Swagger / chat client ──> Spring Boot app ──> PostgreSQL + pgvector
                                      │
                                      └──────────> Ollama models
-MCP client ── bearer key ──────> /mcp ──> shared query and RAG services
+MCP client ── ADMIN JWT ───────> /mcp ──> shared query and RAG services
 
 Inside the app:
 Simulator → measurements → rolling detector → logs + stored alerts
@@ -197,8 +197,8 @@ RAG_ANSWER_MODEL=qwen2.5:1.5b
 ALERTS_GMAIL_ENABLED=false
 ```
 
-Before startup, fill `AUTH_JWT_SECRET`, `INITIAL_ADMIN_USERNAME`,
-`INITIAL_ADMIN_EMAIL`, and `INITIAL_ADMIN_PASSWORD` in `.env`. Generate the JWT
+Before startup, fill `AUTH_JWT_SECRET`, `AUTH_INITIAL_ADMIN_USERNAME`,
+`AUTH_INITIAL_ADMIN_EMAIL`, and `AUTH_INITIAL_ADMIN_PASSWORD` in `.env`. Generate the JWT
 secret with `openssl rand -base64 32` and keep it private. The initial admin
 password must contain at least 12 characters and no more than 72 UTF-8 bytes.
 These values have no working default; startup fails if required values are missing.
@@ -207,20 +207,8 @@ secret remains required. See [Authentication](docs/authentication.md) for the fu
 configuration and login workflow.
 
 `COMPOSE_FILE` selects both files automatically for subsequent `docker compose`
-commands. Full-stack mode requires an MCP key. Generate it without printing it:
-
-```bash
-if grep -q '^MCP_API_KEY=' .env; then
-  printf '%s\n' 'MCP_API_KEY already has an entry; check that it is nonempty and valid.'
-else
-  printf '\nMCP_API_KEY=%s\n' "$(openssl rand -hex 32)" >> .env
-fi
-```
-
-The generated key is 64 hexadecimal characters. The implementation accepts
-32–256 bearer-token characters with no whitespace. Do not regenerate it on every
-startup: clients must use the same key as the server. An existing blank or invalid
-entry needs editing; the command deliberately does not overwrite it.
+commands. MCP now uses the same ADMIN JWT obtained from `/api/auth/login` as the
+other AI endpoints. A separate MCP API key is no longer required or accepted.
 
 PostgreSQL database/user names are both `iiot`. `iiot_dev` is the repository's
 local demo password, not a secret supplied by this guide. You can change
@@ -260,7 +248,7 @@ forward every possible Spring property into the container. For example,
 `RAG_DOCUMENTS` is not forwarded. Customizing those requires a Compose edit or
 override. Likewise, `.env` is not automatically loaded by `./mvnw spring-boot:run`.
 
-Keep `.env`, MCP keys, and Gmail app passwords out of Git. Verify the ignore rule:
+Keep `.env`, JWT signing secrets, access tokens and Gmail app passwords out of Git. Verify the ignore rule:
 
 ```bash
 git check-ignore .env
@@ -550,7 +538,7 @@ supported answer. `AgentService` implements orchestration. Continue with section
 curl -i "$BASE_URL/mcp"
 ```
 
-Expected: HTTP **401**, because no bearer key was supplied. This intentionally
+Expected: HTTP **401**, because no bearer access token was supplied. This intentionally
 omits `--fail` so you can inspect the response. `McpApiKeyFilter` protects the
 transport. Section 13 adds an authenticated protocol client.
 
@@ -802,11 +790,11 @@ the conversational agent.
 
 - Endpoint: `$BASE_URL/mcp`, normally `http://localhost:8080/mcp`.
 - Transport: **Streamable HTTP**, not stdio or the legacy `/sse` transport.
-- Header on every request: `Authorization: Bearer <MCP_API_KEY>`.
+- Header on every request: `Authorization: Bearer <ADMIN access token>`.
 - Tools: `getMachineStatus`, `getRecentAnomalies`, `ragQuery`.
 
-The shared key grants access to all three tools for all machines. REST and chat
-use separate user JWTs; health and Swagger are public. MCP sessions do not
+An ADMIN JWT grants access to all three tools for all machines, and to RAG/chat.
+USER tokens receive 403. Health and Swagger are public. MCP sessions do not
 share the agent's `conversationId` memory; the external client owns its context.
 
 Confirm missing credentials fail:
@@ -815,17 +803,16 @@ Confirm missing credentials fail:
 curl -i "$BASE_URL/mcp"
 ```
 
-Expected: 401 and `{"error":"Unauthorized"}`. A 404 instead suggests MCP is disabled.
+Expected: 401 and `{"status":401,"message":"Authentication required"}`.
+An ADMIN request returns 404 when MCP is disabled.
 
-**Optional Inspector exercise:** requires Node/npm from section 2. Enter the
-existing key from your `.env` privately; do not generate a different one:
+**Optional Inspector exercise:** requires Node/npm from section 2. Log in as ADMIN
+using the authentication guide to obtain `ACCESS_TOKEN`:
 
 ```bash
-read -r -s -p 'MCP key from .env: ' MCP_API_KEY
-printf '\n'
 MCP_URL="$BASE_URL/mcp"
 npx @modelcontextprotocol/inspector --cli "$MCP_URL" --transport http \
-  --header "Authorization: Bearer $MCP_API_KEY" --method tools/list
+  --header "Authorization: Bearer $ACCESS_TOKEN" --method tools/list
 ```
 
 `npx` may ask to download Inspector. Expect the three tool names listed above.
@@ -837,15 +824,14 @@ Use the `MACHINE_ID` obtained in section 9:
 
 ```bash
 npx @modelcontextprotocol/inspector --cli "$MCP_URL" --transport http \
-  --header "Authorization: Bearer $MCP_API_KEY" \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
   --method tools/call --tool-name getMachineStatus --tool-arg "machineId=$MACHINE_ID"
 npx @modelcontextprotocol/inspector --cli "$MCP_URL" --transport http \
-  --header "Authorization: Bearer $MCP_API_KEY" \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
   --method tools/call --tool-name getRecentAnomalies --tool-arg "machineId=$MACHINE_ID"
 npx @modelcontextprotocol/inspector --cli "$MCP_URL" --transport http \
-  --header "Authorization: Bearer $MCP_API_KEY" \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
   --method tools/call --tool-name ragQuery --tool-arg 'question=What does E204 mean?'
-unset MCP_API_KEY
 ```
 
 Successful results have `isError=false`, JSON text content, and
@@ -979,7 +965,10 @@ In Swagger UI:
 4. Open the readings endpoint to inspect required time bounds and pagination.
 5. Explore document search, RAG, and agent request/response schemas.
 
-Only enabled controllers appear. AI routes are absent in default H2 mode.
+AI routes and MCP protocol examples are visible even in default H2 mode.
+ADMIN calls to disabled RAG/chat services return 503. Enable RAG_ENABLED and
+AGENT_ENABLED with PostgreSQL/pgvector and Ollama configured to execute them;
+enable MCP_ENABLED for the MCP servlet. USER callers receive 403.
 The UI executes real operations: `POST /api/documents/ingest` replaces stored
 corpus vectors. MCP's protocol/session workflow is documented separately, not
 represented as ordinary REST operations in Swagger.
@@ -1034,7 +1023,7 @@ PostgreSQL with pgvector and Ollama with installed models. Supply
 `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`,
 `SPRING_DATASOURCE_PASSWORD`, `SPRING_DATASOURCE_DRIVER_CLASS_NAME=org.postgresql.Driver`,
 `OLLAMA_BASE_URL`, `RAG_ENABLED=true`, and `AGENT_ENABLED=true` through the host
-environment. Add `MCP_ENABLED=true` and a valid `MCP_API_KEY` only if desired.
+environment. Add `MCP_ENABLED=true` if desired; clients use an ADMIN JWT.
 H2 does not implement the PostgreSQL vector/ingestion pipeline. Keep the full-stack
 Compose workflow for your first AI run; [ingestion configuration](docs/rag-ingestion.md)
 describes this optional hybrid setup.
@@ -1185,20 +1174,21 @@ posting expanded Compose configuration or credentials when asking for help.
 | Docker socket permission denied | User lacks access to the daemon | `docker info` | Follow your Docker installation's user/rootless access setup; do not make the socket world-writable |
 | `--wait` not recognized | Old Compose plugin | `docker compose version`; `docker compose up --help` | Update to a plugin supporting the flags used here |
 | Port already allocated | Existing PostgreSQL, Ollama, or Java process/container | `docker ps`; read the bind error | Change the matching port in `.env`, rerun `up`, and update `BASE_URL` or host DB URL |
-| `models` is absent | Only base file selected | `docker compose config --services` | Restore both files in `COMPOSE_FILE`; verify MCP key, then rerun startup |
+| `models` is absent | Only base file selected | `docker compose config --services` | Restore both files in `COMPOSE_FILE`; verify JWT/bootstrap configuration, then rerun startup |
 | Container exits | Configuration, build, or dependency failure | `docker compose ps -a`; `docker compose logs --tail=100 app` | Correct the first logged error, then rerun `up --build -d --wait --wait-timeout 900` |
 | PostgreSQL unhealthy | Database startup or vector extension failure | `docker compose logs postgres`; repeat section 8C | Resolve storage/init errors; use the extension repair below for an older initialized volume |
 | App reports DB password failure after editing `.env` | Stored DB role password still has its original value | `docker compose logs app` | Restore the original setting or deliberately update the DB role; do not erase data just to try a password |
 | Model helper fails or models missing | Download/network/disk failure | `docker compose logs models ollama`; `docker compose exec ollama ollama list` | Restore connectivity/free space and rerun full startup; use the explicit pull commands below if needed |
 | App never becomes healthy | Failed migration, missing model, ingestion error, or slow embedding | `docker compose logs -f app models`; section 8 checks | Fix the dependency error; allow CPU ingestion time and rerun the readiness wait |
 | Slow first startup | Image/Maven/model downloads plus embeddings | Follow `models` and `app` logs | Let active downloads finish; preserve volumes to reuse work; verify Docker has enough resources |
-| RAG routes return 404 | RAG disabled or wrong app/port | Service selection and app startup logs; Swagger route list | Use the AI override; ensure `BASE_URL` targets that app |
+| RAG/chat routes return 503 | AI services disabled or unavailable | Service selection and app startup logs; Swagger route list | Use the AI override; ensure `BASE_URL` targets that app |
 | Search returns `[]` | Empty corpus or restrictive threshold | Section 8E; repeat search with `threshold=0.0` | Ingest documents after models are ready; rebuild if source documents changed |
 | RAG/chat returns 503 | Unavailable model/retrieval, or agent capacity exhausted | `docker compose logs app ollama`; inspect models | Restore dependency availability; for capacity, wait for idle sessions to expire |
 | Agent returns `insufficientEvidence=true` | Missing data, wrong tool choices, or rejected evidence | Inspect `evidence`, `evidenceIds`, source passages, timestamps | Verify REST/search independently; ask a specific existing-machine question; do not assume the small model will pass every live check |
 | Chat follow-up returns 404/409 | Expired/unknown conversation or overlapping turn | Check `conversationId` and whether prior request finished | Omit ID to start again, or wait for the current turn |
-| MCP returns 401 | Missing/wrong key or malformed/duplicate header | Confirm client has one bearer header using the existing key | Use the server's key; after rotation recreate app and update clients |
-| MCP returns 404 | MCP disabled or wrong port | `docker compose config --services`; app logs | Enable the full-stack override and supply its required key |
+| MCP returns 401 | Missing, expired or invalid JWT, or malformed/duplicate header | Confirm client sends one bearer header | Log in or refresh the ADMIN token and update the client header |
+| AI/MCP returns 403 | Authenticated account lacks ADMIN role | Check the login response role | Use an ADMIN account |
+| MCP returns 404 | MCP disabled or wrong port | `docker compose config --services`; app logs | Enable MCP_ENABLED and send an ADMIN JWT |
 | MCP returns 403 | Host/origin outside local allowlist | Inspect client URL/origin | Use the documented localhost endpoint for this local setup |
 | Inspector RAG call times out | Client timeout too short for CPU inference | App/Ollama logs and direct RAG request | Increase the client's request timeout; consult the installed Inspector version's configuration |
 | No anomalies yet | Warm-up, simulator disabled, or selected machine unaffected | Readings count; all-machine anomaly query; injection logs | Wait about a minute; verify simulator settings and query all machines |
@@ -1206,6 +1196,31 @@ posting expanded Compose configuration or credentials when asking for help.
 | Windows commands fail | Bash syntax used in PowerShell, wrong Compose separator, or CRLF script | Check shell and file line endings | Use WSL for this guide; use `mvnw.cmd` for native Windows Java commands and explicit Compose `-f` flags |
 | `./mvnw: Permission denied` | Executable bit missing | `ls -l mvnw` | Run `chmod +x mvnw`, then retry |
 | Offline demo fails | Maven cache incomplete or regression | Output from `python3 scripts/demo.py` | Run its online preparation command; inspect the test failure if preparation also fails |
+
+### Docker Hub 401 while loading Java base-image metadata
+
+A failure at `FROM eclipse-temurin:21-jdk` or `FROM eclipse-temurin:21-jre`
+occurs before Java compilation or application authentication. It concerns the
+Docker Hub registry token exchange. First retry the public base-image pulls:
+
+```bash
+docker pull eclipse-temurin:21-jdk
+docker pull eclipse-temurin:21-jre
+docker compose build app
+docker compose up -d --wait --wait-timeout 900
+```
+
+A transient registry/network failure can clear on retry. If either pull still
+returns 401, use `docker login` to refresh your Docker Hub authentication, then
+retry. Run login and Compose under the same user and Docker context. If login
+succeeds but pulls still fail, check registry access through your VPN/proxy and
+Docker daemon network configuration. Application `AUTH_*` settings do not control
+image pulls; changing them cannot repair this build-stage error.
+
+An unauthenticated request to `https://registry-1.docker.io/v2/` normally returns
+401 with a bearer challenge; successful token acquisition followed by an authorized
+manifest request is the meaningful check. See [Docker registry authentication](https://docs.docker.com/reference/api/registry/auth/)
+and [Docker login](https://docs.docker.com/reference/cli/docker/login/).
 
 For a pre-existing PostgreSQL volume missing the extension, the initialization
 script will not rerun automatically. Repair explicitly:
@@ -1276,7 +1291,7 @@ Mark optional exercises as skipped when appropriate.
 - [ ] Repository cloned and expected files present
 - [ ] Clone-URL and older port examples understood
 - [ ] `.env` created without overwriting existing settings
-- [ ] MCP key generated and `.env` confirmed ignored by Git
+- [ ] JWT secret configured and `.env` confirmed ignored by Git
 - [ ] Four full-stack services selected
 - [ ] App, PostgreSQL, and Ollama healthy; model helper exited successfully
 - [ ] Health/readiness requests return `UP`

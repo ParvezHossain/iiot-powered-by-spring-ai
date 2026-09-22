@@ -1,5 +1,6 @@
 package com.iiot.rag;
 
+import org.jspecify.annotations.Nullable;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -14,7 +15,6 @@ import java.util.Map;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,15 +23,16 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-@Tag(name = "Equipment documents", description = "Equipment corpus ingestion and semantic search. Requires rag.enabled=true.")
+@Tag(name = "Equipment documents", description = "Equipment corpus ingestion and semantic search. ADMIN only. Requires rag.enabled=true for execution.")
 @RestController
+@ApiResponse(responseCode = "401", description = "Missing or invalid JWT")
+@ApiResponse(responseCode = "403", description = "ADMIN role required")
 @RequestMapping("/api/documents")
-@ConditionalOnProperty(name = "rag.enabled", havingValue = "true")
 public class EquipmentSearchController {
-    private final VectorStore vectors;
-    private final EquipmentIngestionService ingestion;
+    private final @Nullable VectorStore vectors;
+    private final @Nullable EquipmentIngestionService ingestion;
 
-    public EquipmentSearchController(VectorStore vectors, EquipmentIngestionService ingestion) {
+    public EquipmentSearchController(@Nullable VectorStore vectors, @Nullable EquipmentIngestionService ingestion) {
         this.vectors = vectors;
         this.ingestion = ingestion;
     }
@@ -42,6 +43,7 @@ public class EquipmentSearchController {
     @ApiResponse(responseCode = "500", description = "Document loading, embedding, or database operation failed", content = @Content)
     @PostMapping("/ingest")
     public EquipmentIngestionService.IngestionResult ingest() throws IOException {
+        if (ingestion == null) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "RAG is disabled; enable RAG_ENABLED");
         return ingestion.ingest();
     }
 
@@ -58,6 +60,7 @@ public class EquipmentSearchController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "query must contain 1–2000 characters, topK must be 1–20, threshold must be 0–1");
         }
+        if (vectors == null) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "RAG is disabled; enable RAG_ENABLED");
         var filter = new FilterExpressionBuilder().eq("corpus", RagProperties.CORPUS).build();
         return vectors.similaritySearch(SearchRequest.builder().query(query).topK(topK)
                         .similarityThreshold(threshold).filterExpression(filter).build()).stream()

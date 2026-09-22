@@ -1,5 +1,5 @@
 # Base stack: telemetry and log alerts, with AI features opt-in.
-# For automatic model setup + RAG/chat/MCP, see .env and README.md.
+# For automatic model setup + RAG/chat/MCP, see .env.example and README.md.
 
 services:
   postgres:
@@ -51,9 +51,9 @@ services:
       AUTH_CORS_ORIGINS: ${AUTH_CORS_ORIGINS:-}
 
       # Required for the first administrator.
-      AUTH_INITIAL_ADMIN_USERNAME: ${AUTH_INITIAL_ADMIN_USERNAME:?Set AUTH_INITIAL_ADMIN_USERNAME}
-      AUTH_INITIAL_ADMIN_EMAIL: ${AUTH_INITIAL_ADMIN_EMAIL:?Set AUTH_INITIAL_ADMIN_EMAIL}
-      AUTH_INITIAL_ADMIN_PASSWORD: ${AUTH_INITIAL_ADMIN_PASSWORD:?Set AUTH_INITIAL_ADMIN_PASSWORD}
+      AUTH_INITIAL_ADMIN_USERNAME: ${AUTH_INITIAL_ADMIN_USERNAME:-}
+      AUTH_INITIAL_ADMIN_EMAIL: ${AUTH_INITIAL_ADMIN_EMAIL:-}
+      AUTH_INITIAL_ADMIN_PASSWORD: ${AUTH_INITIAL_ADMIN_PASSWORD:-}
 
       # Spring profile and PostgreSQL
       SPRING_PROFILES_ACTIVE: docker
@@ -74,7 +74,6 @@ services:
 
       # MCP
       MCP_ENABLED: ${MCP_ENABLED:-false}
-      MCP_API_KEY: ${MCP_API_KEY:-}
 
       # Alerts
       ALERTS_ENABLED: ${ALERTS_ENABLED:-true}

@@ -1,6 +1,6 @@
 # Equipment MCP server
 
-Set `MCP_API_KEY` and enable `MCP_ENABLED=true` to expose a Streamable HTTP MCP endpoint at `/mcp` on
+Log in as an ADMIN and enable `MCP_ENABLED=true` to expose a Streamable HTTP MCP endpoint at `/mcp` on
 the app's existing port. It uses `io.modelcontextprotocol.sdk:mcp:2.0.0` directly:
 the SDK handles initialization, capability negotiation, tool discovery, calls,
 HTTP sessions, and shutdown. Existing REST and chat endpoints continue to work.
@@ -12,8 +12,7 @@ For all three tools, follow the [RAG setup](rag-query.md) to install the embeddi
 and chat models and ingest the documents, then enable MCP as well:
 
 ```sh
-# Generate once, then use the same key for the server and your client.
-export MCP_API_KEY="$(openssl rand -hex 32)"
+# Configure JWT signing/bootstrap as described in authentication.md first.
 MCP_ENABLED=true RAG_ENABLED=true docker compose up -d --build --wait app
 ```
 
@@ -39,7 +38,7 @@ the servlet and MCP server are not registered.
 ## Connect an MCP client
 
 Select **Streamable HTTP**, enter the `/mcp` URL, and set the custom header
-`Authorization: Bearer <your MCP_API_KEY>` in an MCP-compatible client.
+`Authorization: Bearer <your ADMIN access token>` in an MCP-compatible client.
 This is an HTTP service, not a stdio process or legacy `/sse` endpoint.
 
 The [official MCP Inspector CLI](https://github.com/modelcontextprotocol/inspector/blob/main/clients/cli/README.md)
@@ -48,7 +47,7 @@ can list and call the tools without involving an LLM (requires Node.js and npm):
 ```sh
 MCP_URL=http://localhost:8081/mcp
 npx @modelcontextprotocol/inspector --cli "$MCP_URL" --transport http \
-  --header "Authorization: Bearer $MCP_API_KEY" --method tools/list
+  --header "Authorization: Bearer $ACCESS_TOKEN" --method tools/list
 ```
 
 Expected names: `getMachineStatus`, `getRecentAnomalies`, `ragQuery`. To obtain an
@@ -64,13 +63,13 @@ Then call each tool:
 ```sh
 MACHINE_ID=replace-with-existing-uuid
 npx @modelcontextprotocol/inspector --cli "$MCP_URL" --transport http \
-  --header "Authorization: Bearer $MCP_API_KEY" \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
   --method tools/call --tool-name getMachineStatus --tool-arg "machineId=$MACHINE_ID"
 npx @modelcontextprotocol/inspector --cli "$MCP_URL" --transport http \
-  --header "Authorization: Bearer $MCP_API_KEY" \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
   --method tools/call --tool-name getRecentAnomalies --tool-arg "machineId=$MACHINE_ID"
 npx @modelcontextprotocol/inspector --cli "$MCP_URL" --transport http \
-  --header "Authorization: Bearer $MCP_API_KEY" \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
   --method tools/call --tool-name ragQuery --tool-arg 'question=What does E204 mean?'
 ```
 
@@ -100,27 +99,26 @@ Unknown tools are handled by the SDK's protocol error path.
 
 ## Authentication and scope
 
-`MCP_API_KEY` (Spring property `mcp.api-key`) is required when MCP is enabled.
-It must contain 32–256 bearer-token characters with no whitespace; the generation
-command above produces a suitable random key. There is no default credential.
-Keep the key in the environment rather than source control. Rotate it by replacing
-the environment value and restarting/recreating the app; existing clients must
-then use the new key. MCP-disabled startup requires no key.
+Every `/mcp` request requires exactly one `Authorization: Bearer <ADMIN access token>`
+header, including initialization, tool discovery/calls, streaming GETs and session
+DELETEs. Obtain the token from `/api/auth/login` using an ADMIN account; see
+[Authentication](authentication.md). The same Spring Security JWT filter chain
+protects REST and MCP. Signature, issuer, audience, expiry, account status and
+session version are validated on every request. Shared `MCP_API_KEY` credentials
+are no longer accepted or required.
 
-Every `/mcp` request requires exactly one `Authorization: Bearer <key>` header,
-including initialization, tool discovery/calls, streaming GETs, and session DELETEs.
-The filter runs before the SDK and uses a constant-time byte comparison. A session
-ID is not a credential. Missing, incorrect, malformed, or duplicate authorization
-headers return HTTP 401 with `WWW-Authenticate: Bearer realm="iiot-mcp"` and a
-generic body. Tokens in query parameters are not accepted, and rejected requests
-do not reach the tools. Configuration errors and rejection bodies omit credentials.
+Missing, invalid, expired or revoked tokens return 401. Valid USER tokens return
+403, including when presented with an existing admin session ID. A session ID is
+not a credential. Error bodies contain `status` and `message`. Tokens in query
+parameters and duplicate Authorization headers are rejected. Refresh the user
+JWT through `/api/auth/refresh` and update the MCP client's header before it expires.
+All ADMINs have access to the three read-only tools and shared machine data.
+Use HTTPS outside local development.
 
-The deliberate demo scope is **one shared key for all three read-only MCP tools
-and all machines**. It provides an explicit access gate with no user accounts,
-per-machine roles, or per-tool permissions. This filter covers `/mcp` and its
-subpaths; the existing REST/chat APIs and health endpoint keep their current
-access behavior. It is not application-wide authentication or an OAuth server.
-Use HTTPS if carrying the token beyond a trusted local connection.
+Swagger documents `/mcp` under **MCP tool calling**, with initialize, initialized,
+tools/list and tools/call examples. Use an MCP client for the session lifecycle
+and streaming; POST requires `Accept: application/json, text/event-stream`.
+The protocol is documented even when disabled; enable `MCP_ENABLED` to execute it.
 
 Host and Origin validation also accepts
 localhost, 127.0.0.1, and ::1 (any port); absent Origin is allowed for native clients.
@@ -142,6 +140,6 @@ Ollama download is needed in CI. Checks also cover invalid arguments, missing
 machines, dependency failure, insufficient evidence, rejected Origin, opt-in
 wiring, and disabled RAG. Authentication checks reject missing/wrong/malformed
 credentials across MCP methods, duplicate headers, and query-string tokens—even
-with a valid session ID. Authenticated SDK discovery and all tool calls succeed;
-missing or invalid server keys prevent startup. These tests establish MCP interoperability and adapter
+with a valid session ID. USERs cannot discover or execute tools. ADMIN SDK
+discovery and all tool calls succeed; no separate server key is needed. These tests establish MCP interoperability and adapter
 behavior; they do not claim a Claude Desktop session or live model evaluation.

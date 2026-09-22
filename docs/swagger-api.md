@@ -1,7 +1,7 @@
 # Interactive API documentation
 
 > REST APIs now require JWT authentication. Use `/api/auth/login`, then enter the
-> returned access token in **Authorize**. Document ingestion and `/api/admin/**`
+> returned access token in **Authorize**. All AI/document routes, MCP and `/api/admin/**`
 > require ADMIN. Public auth routes, health and documentation remain accessible.
 > See [Authentication](authentication.md) for setup, refresh, bootstrap and examples.
 > Older curl examples below require `-H "Authorization: Bearer $ACCESS_TOKEN"`
@@ -34,8 +34,7 @@ the stored equipment corpus and invokes the embedding model.
 | GET | `/actuator/health` | Application health; available health groups are also exposed by Actuator |
 
 The default H2 development mode exposes telemetry and health. The full AI Compose
-stack also exposes documents, RAG, and chat. Disabled controllers do not appear
-in Swagger. Simulator and alert workers have no HTTP endpoints.
+stack also exposes documents, RAG, and chat. AI controllers remain visible in Swagger; disabled services return 503 to ADMIN callers. Simulator and alert workers have no HTTP endpoints.
 
 REST requires JWT bearer authentication. The specification declares a global
 bearer requirement with public authentication operation overrides. Health is
@@ -45,10 +44,13 @@ can still have `insufficientEvidence=true`; inspect that field and the evidence.
 
 ## MCP
 
-`/mcp` is a separate SDK servlet implementing Streamable HTTP JSON-RPC, not a REST
-controller. Swagger does not model its session lifecycle or tool discovery.
+`/mcp` is an SDK servlet implementing Streamable HTTP JSON-RPC. Swagger explicitly
+documents initialization, tool discovery/call examples, event streaming and session
+deletion under **MCP tool calling**. Use an MCP client for protocol session and
+streaming support; send `Accept: application/json, text/event-stream` on POST.
 When `mcp.enabled=true`, use an MCP client with
-`Authorization: Bearer <MCP_API_KEY>`. Missing or invalid credentials return 401.
+`Authorization: Bearer <ADMIN access token>`. Missing or invalid credentials return
+401; authenticated USER accounts receive 403. Shared MCP keys are no longer accepted.
 Use `tools/list` to discover `getMachineStatus`, `getRecentAnomalies`, and `ragQuery`.
 See [MCP server](mcp-server.md) for connection and protocol details.
 

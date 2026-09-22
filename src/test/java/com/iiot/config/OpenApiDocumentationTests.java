@@ -28,7 +28,7 @@ class OpenApiDocumentationTests {
     @TestComponent
     @Configuration(proxyBeanMethods = false)
     @EnableAutoConfiguration
-    @Import({OpenApiConfiguration.class, TelemetryController.class, EquipmentSearchController.class,
+    @Import({OpenApiConfiguration.class, McpOpenApiConfiguration.class, TelemetryController.class, EquipmentSearchController.class,
             RagQueryController.class, AgentController.class})
     static class ApiApplication {}
 
@@ -44,7 +44,7 @@ class OpenApiDocumentationTests {
         mvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.info.title").value("IIoT Powered by AI API"))
-                .andExpect(jsonPath("$.paths.length()").value(7))
+                .andExpect(jsonPath("$.paths.length()").value(8))
                 .andExpect(jsonPath("$.paths['/api/machines/{id}/status'].get.responses['404']").exists())
                 .andExpect(jsonPath("$.paths['/api/machines/{id}/readings'].get.parameters[4].schema.maximum").value(1000))
                 .andExpect(jsonPath("$.paths['/api/anomalies'].get.operationId").value("getAnomalies"))
@@ -57,7 +57,12 @@ class OpenApiDocumentationTests {
                 .andExpect(jsonPath("$.components.schemas.RagQuestion.properties.question.maxLength").value(2000))
                 .andExpect(jsonPath("$.components.schemas.RagAnswer.properties.citations").exists())
                 .andExpect(jsonPath("$.components.schemas.AgentConversationAnswer.properties.evidence").exists())
-                .andExpect(jsonPath("$.security[0].bearerAuth").isArray());
+                .andExpect(jsonPath("$.security[0].bearerAuth").isArray())
+                .andExpect(jsonPath("$.paths['/mcp'].post.security[0].bearerAuth").isArray())
+                .andExpect(jsonPath("$.paths['/mcp'].post.parameters[0].schema.type").value("string"))
+                .andExpect(jsonPath("$.paths['/mcp'].post.responses['200'].headers['Mcp-Session-Id'].schema.type").value("string"))
+                .andExpect(jsonPath("$.paths['/mcp'].post.requestBody.content['application/json'].examples.listTools.value.method").value("tools/list"))
+                .andExpect(jsonPath("$.paths['/mcp'].post.requestBody.content['application/json'].examples.askQuestion.value.params.name").value("ragQuery"));
     }
 
     @Test

@@ -43,7 +43,7 @@ retained. An expired or unknown ID returns HTTP 404, a malformed UUID HTTP 400,
 and an overlapping request for the same conversation HTTP 409. Capacity exhaustion
 returns HTTP 503. Failed model calls do not append partial turns. Requests for
 different conversations can proceed independently. Conversation IDs are opaque
-handles, not authenticated user identities; this local endpoint has no user accounts.
+handles bound to the authenticated creator. This endpoint requires an ADMIN JWT.
 Multi-instance deployments need shared storage or session affinity.
 
 The three-turn HTTP regression uses a machine-12 lookup, a pronoun-based latest

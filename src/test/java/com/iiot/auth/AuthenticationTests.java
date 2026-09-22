@@ -253,6 +253,29 @@ class AuthenticationTests {
     }
 
     @Test
+    void aiRoutesRequireAdminAndRemainVisibleWhenDisabled() throws Exception {
+        register("ai-user");
+        String userToken = access(login("ai-user", PASSWORD));
+        String adminToken = admin();
+        for (String path : List.of("/api/rag/query", "/api/agent/chat", "/api/documents/ingest")) {
+            mvc.perform(body(post(path), Map.of("question", "What does E204 mean?"))).andExpect(status().isUnauthorized());
+            mvc.perform(body(bearer(post(path), userToken), Map.of("question", "What does E204 mean?"))).andExpect(status().isForbidden());
+            mvc.perform(body(bearer(post(path), adminToken), Map.of("question", "What does E204 mean?"))).andExpect(status().isServiceUnavailable());
+        }
+        mvc.perform(get("/api/documents/search").param("query", "E204")).andExpect(status().isUnauthorized());
+        mvc.perform(bearer(get("/api/documents/search").param("query", "E204"), userToken)).andExpect(status().isForbidden());
+        mvc.perform(bearer(get("/api/documents/search").param("query", "E204"), adminToken)).andExpect(status().isServiceUnavailable());
+        mvc.perform(post("/mcp")).andExpect(status().isUnauthorized());
+        mvc.perform(bearer(post("/mcp"), userToken)).andExpect(status().isForbidden());
+        mvc.perform(bearer(post("/mcp"), "legacy-shared-service-key")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/api/rag/query']").exists())
+                .andExpect(jsonPath("$.paths['/api/agent/chat']").exists())
+                .andExpect(jsonPath("$.paths['/api/documents/search']").exists())
+                .andExpect(jsonPath("$.paths['/mcp'].post").exists());
+    }
+
+    @Test
     void adminCreatesPromotesDisablesAndInvalidatesExistingTokens() throws Exception {
         String admin = admin();
         var response = mvc.perform(body(bearer(post("/api/admin/users"), admin), Map.of("username", "managed", "email", "managed@example.test", "password", PASSWORD, "role", "ADMIN")))
@@ -312,7 +335,10 @@ class AuthenticationTests {
         var missing = new InitialAdminInitializer(users, service, bootstrapProperties("", "", ""), transactions, validator);
         missing.run(null);
         jdbc.update("DELETE FROM telemetry.auth_users");
-        assertThatThrownBy(() -> missing.run(null)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> missing.run(null)).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("AUTH_INITIAL_ADMIN_USERNAME")
+                .hasMessageContaining("AUTH_INITIAL_ADMIN_EMAIL")
+                .hasMessageContaining("AUTH_INITIAL_ADMIN_PASSWORD");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM telemetry.auth_users", Integer.class)).isZero();
     }
 

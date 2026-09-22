@@ -30,9 +30,8 @@ public class InitialAdminInitializer implements ApplicationRunner {
             if (users.jdbc().queryForObject("SELECT COUNT(*) FROM telemetry.auth_users WHERE role='ADMIN'", Integer.class) > 0)
                 return;
             var request = new AdminUserController.NewUser(p.initialAdminUsername(), p.initialAdminEmail(), p.initialAdminPassword(), AuthRepository.Role.ADMIN);
-            System.out.println("Admin Request: " + request);
             if (!validator.validate(request).isEmpty())
-                throw new IllegalStateException("Configure INITIAL_ADMIN_USERNAME, INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD for first startup");
+                throw new IllegalStateException("Configure AUTH_INITIAL_ADMIN_USERNAME, AUTH_INITIAL_ADMIN_EMAIL and AUTH_INITIAL_ADMIN_PASSWORD for first startup");
             auth.create(request.username(), request.email(), request.password(), request.role());
         });
     }

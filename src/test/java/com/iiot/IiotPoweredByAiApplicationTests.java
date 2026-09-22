@@ -13,14 +13,14 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = "simulator.enabled=false")
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {"simulator.enabled=false", "RAG_ANSWER_MODEL=configured-test-model"})
 class IiotPoweredByAiApplicationTests {
 
 	@LocalServerPort
 	private int port;
 
     @Test
-    void defaultDocumentationIncludesTelemetryAndHealthButNotDisabledAi() throws Exception {
+    void defaultDocumentationIncludesAiEvenWhenExecutionIsDisabled() throws Exception {
         try (var client = HttpClient.newHttpClient()) {
             var response = client.send(HttpRequest.newBuilder(
                     URI.create("http://localhost:" + port + "/v3/api-docs")).GET().build(),
@@ -29,10 +29,21 @@ class IiotPoweredByAiApplicationTests {
             var paths = JsonMapper.builder().build().readTree(response.body()).path("paths");
             assertThat(paths.has("/api/machines/{id}/status")).isTrue();
             assertThat(paths.has("/actuator/health")).isTrue();
-            assertThat(paths.has("/api/rag/query")).isFalse();
-            assertThat(paths.has("/api/agent/chat")).isFalse();
-            assertThat(paths.has("/api/documents/search")).isFalse();
+            assertThat(paths.has("/api/rag/query")).isTrue();
+            assertThat(paths.has("/api/agent/chat")).isTrue();
+            assertThat(paths.has("/api/documents/search")).isTrue();
+            assertThat(paths.has("/mcp")).isTrue();
         }
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.core.env.Environment environment;
+
+    @Test
+    void ragAnswerModelUsesTheConfiguredEnvironmentValue() {
+        var properties = org.springframework.boot.context.properties.bind.Binder.get(environment)
+                .bind("rag.answer", com.iiot.rag.RagAnswerProperties.class).get();
+        assertThat(properties.model()).isEqualTo("configured-test-model");
     }
 
 	@Test

@@ -39,7 +39,6 @@ import static org.mockito.Mockito.*;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "mcp.enabled=true", "rag.enabled=false", "agent.enabled=false", "simulator.enabled=false",
-        "mcp.api-key=mcp-test-only-key-0123456789abcdef0123456789",
         "spring.datasource.url=jdbc:h2:mem:mcp;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1"})
 @Import(EquipmentMcpTests.RagFixture.class)
 class EquipmentMcpTests {
@@ -52,10 +51,13 @@ class EquipmentMcpTests {
     private final JsonMapper json = JsonMapper.builder().build();
     private static final String SAMPLE_TIME = "2026-09-07T12:00:00Z";
     private static final String PASSAGE = "E204 means the temperature sensor signal is unavailable.";
-    private static final String AUTHORIZATION = "Bearer mcp-test-only-key-0123456789abcdef0123456789";
+    @Autowired com.iiot.auth.AuthService authentication;
+    @Autowired com.iiot.auth.AuthProperties authProperties;
+    private String AUTHORIZATION;
 
     @BeforeEach
     void connect() {
+        AUTHORIZATION = "Bearer " + authentication.login(authProperties.initialAdminUsername(), authProperties.initialAdminPassword()).accessToken();
         reset(vectors, chat);
         when(vectors.similaritySearch(any(SearchRequest.class))).thenReturn(List.of(Document.builder()
                 .id("fault-reference-chunk").text(PASSAGE).metadata(Map.of("source", "fault-code-reference.md")).build()));
@@ -176,8 +178,8 @@ class EquipmentMcpTests {
                 }
                 var response = http.send(request.build(), java.net.http.HttpResponse.BodyHandlers.ofString());
                 assertThat(response.statusCode()).as(method + " rejects invalid credentials").isEqualTo(401);
-                assertThat(response.headers().firstValue("WWW-Authenticate")).contains("Bearer realm=\"iiot-mcp\"");
-                assertThat(response.body()).isEqualTo("{\"error\":\"Unauthorized\"}");
+                assertThat(response.headers().firstValue("WWW-Authenticate")).contains("Bearer");
+                assertThat(response.body()).isEqualTo("{\"status\":401,\"message\":\"Authentication required\"}");
             }
         }
         // A rejected DELETE did not close the session; only a credentialed DELETE can do so.
@@ -185,6 +187,37 @@ class EquipmentMcpTests {
                 .header("Authorization", AUTHORIZATION).header("mcp-session-id", session).DELETE().build(),
                 java.net.http.HttpResponse.BodyHandlers.ofString());
         assertThat(deleted.statusCode()).isEqualTo(200);
+        verifyNoInteractions(vectors, chat);
+    }
+
+    @Test
+    void ordinaryUsersCannotDiscoverOrCallToolsEvenWithAnAdminSession() throws Exception {
+        String username = "mcp-user-" + UUID.randomUUID();
+        authentication.create(username, username + "@example.test", "mcp-test-password-2026", com.iiot.auth.AuthRepository.Role.USER);
+        String userToken = authentication.login(username, "mcp-test-password-2026").accessToken();
+        var http = java.net.http.HttpClient.newHttpClient();
+        var uri = java.net.URI.create("http://localhost:" + port + "/mcp");
+        String initialize = json.writeValueAsString(Map.of("jsonrpc", "2.0", "id", 1, "method", "initialize",
+                "params", Map.of("protocolVersion", "2025-11-25", "capabilities", Map.of(),
+                        "clientInfo", Map.of("name", "role-test", "version", "1.0"))));
+        var initialized = http.send(java.net.http.HttpRequest.newBuilder(uri)
+                .header("Authorization", AUTHORIZATION).header("Accept", "application/json, text/event-stream")
+                .header("Content-Type", "application/json")
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(initialize)).build(), java.net.http.HttpResponse.BodyHandlers.ofString());
+        String session = initialized.headers().firstValue("mcp-session-id").orElseThrow();
+        for (String method : List.of("initialize", "tools/list", "tools/call")) {
+            String payload = json.writeValueAsString(Map.of("jsonrpc", "2.0", "id", 2, "method", method,
+                    "params", Map.of("name", "ragQuery", "arguments", Map.of("question", "E204"))));
+            var response = http.send(java.net.http.HttpRequest.newBuilder(uri)
+                    .header("Authorization", "Bearer " + userToken).header("Mcp-Session-Id", session)
+                    .header("Accept", "application/json, text/event-stream").header("Content-Type", "application/json")
+                    .POST(java.net.http.HttpRequest.BodyPublishers.ofString(payload)).build(), java.net.http.HttpResponse.BodyHandlers.ofString());
+            assertThat(response.statusCode()).isEqualTo(403);
+            assertThat(json.readTree(response.body()).path("message").asString()).isEqualTo("Access denied");
+        }
+        var closed = http.send(java.net.http.HttpRequest.newBuilder(uri).header("Authorization", AUTHORIZATION)
+                .header("Mcp-Session-Id", session).DELETE().build(), java.net.http.HttpResponse.BodyHandlers.ofString());
+        assertThat(closed.statusCode()).isEqualTo(200);
         verifyNoInteractions(vectors, chat);
     }
 

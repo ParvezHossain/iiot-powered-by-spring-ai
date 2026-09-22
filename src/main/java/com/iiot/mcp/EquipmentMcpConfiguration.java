@@ -20,10 +20,8 @@ import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.web.servlet.ServletRegistrationBean;
-import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
@@ -34,16 +32,6 @@ import tools.jackson.databind.json.JsonMapper;
 @ConditionalOnProperty(name = "mcp.enabled", havingValue = "true")
 public class EquipmentMcpConfiguration {
     private static final JsonMapper JSON = JsonMapper.builder().build();
-
-    @Bean
-    FilterRegistrationBean<McpApiKeyFilter> equipmentMcpAuthentication(@Value("${mcp.api-key:}") String apiKey) {
-        var registration = new FilterRegistrationBean<>(new McpApiKeyFilter(apiKey));
-        registration.addUrlPatterns("/mcp", "/mcp/*");
-        registration.setDispatcherTypes(java.util.EnumSet.allOf(jakarta.servlet.DispatcherType.class));
-        registration.setAsyncSupported(true);
-        registration.setOrder(org.springframework.core.Ordered.HIGHEST_PRECEDENCE);
-        return registration;
-    }
 
     @Bean
     HttpServletStreamableServerTransportProvider equipmentMcpTransport() {

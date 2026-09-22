@@ -61,10 +61,9 @@ import static org.mockito.Mockito.*;
         "spring.profiles.active=", "spring.main.banner-mode=off", "simulator.enabled=false",
         "agent.enabled=true", "rag.enabled=true", "mcp.enabled=true",
         "alerts.enabled=true", "alerts.gmail.enabled=false",
-        "mcp.api-key=isolated-demo-only-0123456789abcdef0123456789", "server.address=127.0.0.1"})
+        "server.address=127.0.0.1"})
 class InterviewDemoTests {
     private static final UUID MACHINE = UUID.fromString("00000000-0000-0000-0000-000000000001");
-    private static final String AUTH = "Bearer isolated-demo-only-0123456789abcdef0123456789";
     private static final JsonMapper JSON = JsonMapper.builder().build();
     @LocalServerPort int port;
     @Autowired JdbcTemplate jdbc;
@@ -165,7 +164,7 @@ class InterviewDemoTests {
                 .timeout(Duration.ofSeconds(5)).GET().build(), HttpResponse.BodyHandlers.ofString());
         assertThat(denied.statusCode()).isEqualTo(401);
         var transport = HttpClientStreamableHttpTransport.builder(base()).endpoint("/mcp")
-                .requestBuilder(HttpRequest.newBuilder().header("Authorization", AUTH)).openConnectionOnStartup(false).build();
+                .requestBuilder(HttpRequest.newBuilder().header("Authorization", "Bearer " + demoAccessToken())).openConnectionOnStartup(false).build();
         var client = McpClient.sync(transport).requestTimeout(Duration.ofSeconds(10)).build();
         try {
             client.initialize();

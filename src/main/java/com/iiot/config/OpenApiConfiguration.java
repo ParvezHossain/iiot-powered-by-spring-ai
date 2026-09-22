@@ -29,9 +29,9 @@ public class OpenApiConfiguration {
                         .version("0.0.1-SNAPSHOT")
                         .description("Industrial telemetry, anomaly detection, equipment retrieval, and grounded AI chat. "
                                 + "REST requires a JWT bearer token; health, authentication and documentation are public. RAG endpoints require rag.enabled=true; "
-                                + "chat also requires agent.enabled=true. Disabled endpoints are absent from this document. "
+                                + "chat also requires agent.enabled=true. AI REST routes remain documented and return 503 when disabled. "
                                 + "MCP is a separate Streamable HTTP protocol at /mcp, enabled by mcp.enabled=true and protected "
-                                + "by Authorization: Bearer <MCP_API_KEY>; use an MCP client for discovery and calls. "
+                                + "by an ADMIN JWT. RAG, documents, chat and MCP tool calls require ROLE_ADMIN. "
                                 + "POST /api/documents/ingest replaces the equipment corpus. Equipment data is synthetic.")
                         .license(new License().name("MIT").url("https://opensource.org/licenses/MIT")));
     }
