@@ -1,6 +1,7 @@
 """Optional live acceptance check: python3 scripts/verify-rag-query.py [base-url]."""
 
 import json
+import os
 from pathlib import Path
 import re
 import sys
@@ -11,7 +12,7 @@ def ask(base_url, question):
     request = urllib.request.Request(
         base_url.rstrip("/") + "/api/rag/query",
         data=json.dumps({"question": question}).encode(),
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "Authorization": "Bearer " + os.environ["IIOT_ACCESS_TOKEN"]},
         method="POST",
     )
     with urllib.request.urlopen(request, timeout=150) as response:

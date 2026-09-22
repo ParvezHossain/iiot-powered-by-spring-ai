@@ -126,6 +126,7 @@ class InterviewDemoTests {
             body.put("question", questions[turn]);
             if (conversation != null) body.put("conversationId", conversation);
             var response = http.send(HttpRequest.newBuilder(URI.create(base() + "/api/agent/chat"))
+                    .header("Authorization", "Bearer " + demoAccessToken())
                     .timeout(Duration.ofSeconds(10)).header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(body))).build(), HttpResponse.BodyHandlers.ofString());
             assertThat(response.statusCode()).isEqualTo(200);
@@ -209,6 +210,14 @@ class InterviewDemoTests {
         if (output != null) Files.writeString(Path.of(output), transcript.toString());
     }
 
+    @Autowired com.iiot.auth.AuthService authentication;
+    @Autowired com.iiot.auth.AuthProperties authenticationProperties;
+
+    private String demoAccessToken() {
+        return authentication.login(authenticationProperties.initialAdminUsername(),
+                authenticationProperties.initialAdminPassword()).accessToken();
+    }
+
     private String base() { return "http://127.0.0.1:" + port; }
 
     private void reading(double value, OffsetDateTime at) {
@@ -236,7 +245,9 @@ class InterviewDemoTests {
     @TestComponent
     @Configuration(proxyBeanMethods = false)
     @EnableAutoConfiguration
-    @Import({AgentController.class, AgentService.class, TelemetryController.class, TelemetryQueryService.class,
+    @Import({com.iiot.auth.SecurityConfiguration.class, com.iiot.auth.AuthRepository.class,
+            com.iiot.auth.TokenService.class, com.iiot.auth.AuthService.class, com.iiot.auth.InitialAdminInitializer.class,
+            AgentController.class, AgentService.class, TelemetryController.class, TelemetryQueryService.class,
             TelemetryTools.class, EquipmentMcpConfiguration.class, AlertConfiguration.class, AnomalyAlertService.class})
     static class DemoApp {
         @Bean AgentProperties agentProperties() { return new AgentProperties("deterministic-demo", 4, 8); }

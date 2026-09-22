@@ -23,7 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(classes = OpenApiDocumentationTests.ApiApplication.class, properties = {
         "rag.enabled=true", "agent.enabled=true", "springdoc.show-actuator=false",
         "spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration,org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration"})
-@AutoConfigureMockMvc
+@AutoConfigureMockMvc(addFilters = false)
 class OpenApiDocumentationTests {
     @TestComponent
     @Configuration(proxyBeanMethods = false)
@@ -57,7 +57,7 @@ class OpenApiDocumentationTests {
                 .andExpect(jsonPath("$.components.schemas.RagQuestion.properties.question.maxLength").value(2000))
                 .andExpect(jsonPath("$.components.schemas.RagAnswer.properties.citations").exists())
                 .andExpect(jsonPath("$.components.schemas.AgentConversationAnswer.properties.evidence").exists())
-                .andExpect(jsonPath("$.security").doesNotExist());
+                .andExpect(jsonPath("$.security[0].bearerAuth").isArray());
     }
 
     @Test

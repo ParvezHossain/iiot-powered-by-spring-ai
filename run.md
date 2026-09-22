@@ -1,5 +1,13 @@
 # Run and Explore IIoT Powered by AI
 
+> **Authentication setup:** REST APIs now require JWT bearer tokens. Before starting,
+> set `AUTH_JWT_SECRET` and the three `INITIAL_ADMIN_*` values in `.env` (Docker)
+> or your shell environment (host execution). Follow [Authentication](docs/authentication.md)
+> for registration/login, token refresh, admin APIs and complete configuration.
+> Obtain `ACCESS_TOKEN` using that guide before running the business API examples below.
+> Health and Swagger remain public; MCP continues to use its separate `MCP_API_KEY`.
+
+
 Start with sections 1–8 to get the full stack running. Continue through the lab in
 order; optional development, email, and integration-test exercises are marked.
 Run commands from the repository root in **Bash on Linux, macOS, or WSL** unless
@@ -145,7 +153,7 @@ iiot-powered-by-ai/
 ├── src/main/resources/
 │   ├── application.properties
 │   ├── application-docker.properties
-│   └── db/migration/           # Flyway V1 and V2 SQL migrations
+│   └── db/migration/           # Flyway V1–V3 SQL migrations
 ├── src/test/java/com/iiot/      # Automated tests and demo fixtures
 ├── docker-compose.yml         # Base services
 ├── docker-compose.ai.yml      # Full AI stack override
@@ -188,6 +196,15 @@ AGENT_MODEL=qwen2.5:1.5b
 RAG_ANSWER_MODEL=qwen2.5:1.5b
 ALERTS_GMAIL_ENABLED=false
 ```
+
+Before startup, fill `AUTH_JWT_SECRET`, `INITIAL_ADMIN_USERNAME`,
+`INITIAL_ADMIN_EMAIL`, and `INITIAL_ADMIN_PASSWORD` in `.env`. Generate the JWT
+secret with `openssl rand -base64 32` and keep it private. The initial admin
+password must contain at least 12 characters and no more than 72 UTF-8 bytes.
+These values have no working default; startup fails if required values are missing.
+After an admin exists in PostgreSQL, bootstrap credentials can be removed; the JWT
+secret remains required. See [Authentication](docs/authentication.md) for the full
+configuration and login workflow.
 
 `COMPOSE_FILE` selects both files automatically for subsequent `docker compose`
 commands. Full-stack mode requires an MCP key. Generate it without printing it:
@@ -341,7 +358,7 @@ On a clean machine, startup proceeds as follows:
 4. Start Ollama. The `models` helper installs `nomic-embed-text:v1.5` and
    `qwen2.5:1.5b` by default. Existing models are reused; differing configured chat
    models are installed separately.
-5. Start the app. Flyway applies V1 (machines, readings, events) and V2 (alerts).
+5. Start the app. Flyway applies V1 (machines, readings, events), V2 (alerts), and V3 (authentication).
    Spring AI initializes `public.equipment_vectors` separately.
 6. Load, chunk, embed, and store the equipment documents. With startup ingestion
    enabled, successful ingestion is required before application readiness.
@@ -465,7 +482,7 @@ There is no REST endpoint for listing machines. Obtain a real UUID from the data
 MACHINE_ID=$(docker compose exec -T postgres psql -U iiot -d iiot -Atc \
   "SELECT id FROM telemetry.machines WHERE name = 'SIM-001';")
 printf '%s\n' "$MACHINE_ID"
-curl --fail "$BASE_URL/api/machines/$MACHINE_ID/status"
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail "$BASE_URL/api/machines/$MACHINE_ID/status"
 ```
 
 Expect one UUID, then JSON containing `id`, `name`, `location`, `status`, and
@@ -481,7 +498,7 @@ FROM=$(docker compose exec -T postgres psql -U iiot -d iiot -Atc \
   "SELECT to_char((now() - interval '10 minutes') AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"');")
 TO=$(docker compose exec -T postgres psql -U iiot -d iiot -Atc \
   "SELECT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"');")
-curl --fail --get "$BASE_URL/api/machines/$MACHINE_ID/readings" \
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail --get "$BASE_URL/api/machines/$MACHINE_ID/readings" \
   --data-urlencode "from=$FROM" --data-urlencode "to=$TO" \
   --data-urlencode 'metricType=vibration_mm_s' \
   --data-urlencode 'limit=20' --data-urlencode 'offset=0'
@@ -494,7 +511,7 @@ Expect an array, oldest first. Bounds are inclusive; `limit` is 1–1000 and
 ### C. Inspect anomalies
 
 ```bash
-curl --fail "$BASE_URL/api/anomalies"
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail "$BASE_URL/api/anomalies"
 ```
 
 Expect an array of anomalies, newest first, over the preceding hour. Initially
@@ -504,9 +521,9 @@ wait roughly a minute for the first default injection. Continue with section 14.
 ### D. Find a manual passage, then ask a grounded question
 
 ```bash
-curl --fail --get "$BASE_URL/api/documents/search" \
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail --get "$BASE_URL/api/documents/search" \
   --data-urlencode 'query=What does E204 mean?' --data-urlencode 'topK=3'
-curl --fail "$BASE_URL/api/rag/query" -H 'Content-Type: application/json' \
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail "$BASE_URL/api/rag/query" -H 'Content-Type: application/json' \
   -d '{"question":"What does E204 mean?"}'
 ```
 
@@ -518,7 +535,7 @@ Next compare the returned quotes with the source document in section 11.
 ### E. Ask the agent about current data and documentation
 
 ```bash
-curl --fail "$BASE_URL/api/agent/chat" -H 'Content-Type: application/json' \
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail "$BASE_URL/api/agent/chat" -H 'Content-Type: application/json' \
   -d '{"question":"Is SIM-001 vibration normal, and what should I do if not?"}'
 ```
 
@@ -659,7 +676,7 @@ RAG answers default to six matches and threshold 0.45.
 Test retrieval independently of answer generation:
 
 ```bash
-curl --fail --get "$BASE_URL/api/documents/search" \
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail --get "$BASE_URL/api/documents/search" \
   --data-urlencode 'query=What repair fixed the compressor overheating caused by a blocked cooling screen?' \
   --data-urlencode 'topK=3' --data-urlencode 'threshold=0.0'
 ```
@@ -670,9 +687,9 @@ Similarity scores are not diagnostic confidence.
 Test supported and unsupported questions:
 
 ```bash
-curl --fail "$BASE_URL/api/rag/query" -H 'Content-Type: application/json' \
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail "$BASE_URL/api/rag/query" -H 'Content-Type: application/json' \
   -d '{"question":"What does E204 mean?"}'
-curl --fail "$BASE_URL/api/rag/query" -H 'Content-Type: application/json' \
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail "$BASE_URL/api/rag/query" -H 'Content-Type: application/json' \
   -d '{"question":"What does E999 mean?"}'
 ```
 
@@ -690,7 +707,7 @@ checks source fidelity, not the correctness of every interpretation.
 **Optional corpus refresh — changes stored vectors:**
 
 ```bash
-curl --fail -X POST "$BASE_URL/api/documents/ingest"
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail -X POST "$BASE_URL/api/documents/ingest"
 ```
 
 Expected for the current corpus:
@@ -740,7 +757,7 @@ or missing machines need clarification. The agent must use an existing UUID.
 Start a conversation:
 
 ```bash
-curl --fail "$BASE_URL/api/agent/chat" -H 'Content-Type: application/json' \
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail "$BASE_URL/api/agent/chat" -H 'Content-Type: application/json' \
   -d '{"question":"What is SIM-001 latest vibration reading?"}'
 ```
 
@@ -749,9 +766,9 @@ send two follow-ups:
 
 ```bash
 read -r -p 'Paste the returned conversationId: ' CONVERSATION_ID
-curl --fail "$BASE_URL/api/agent/chat" -H 'Content-Type: application/json' \
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail "$BASE_URL/api/agent/chat" -H 'Content-Type: application/json' \
   -d "{\"conversationId\":\"$CONVERSATION_ID\",\"question\":\"Is that normal, and what should I do?\"}"
-curl --fail "$BASE_URL/api/agent/chat" -H 'Content-Type: application/json' \
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail "$BASE_URL/api/agent/chat" -H 'Content-Type: application/json' \
   -d "{\"conversationId\":\"$CONVERSATION_ID\",\"question\":\"And what about last week?\"}"
 ```
 
@@ -788,8 +805,8 @@ the conversational agent.
 - Header on every request: `Authorization: Bearer <MCP_API_KEY>`.
 - Tools: `getMachineStatus`, `getRecentAnomalies`, `ragQuery`.
 
-The shared key grants access to all three tools for all machines. REST, chat,
-health, and Swagger do not use this bearer authentication. MCP sessions do not
+The shared key grants access to all three tools for all machines. REST and chat
+use separate user JWTs; health and Swagger are public. MCP sessions do not
 share the agent's `conversationId` memory; the external client owns its context.
 
 Confirm missing credentials fail:
@@ -862,7 +879,7 @@ Observe all machines, because the injected fault may affect a different machine
 from the one you selected earlier:
 
 ```bash
-curl --fail "$BASE_URL/api/anomalies"
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail "$BASE_URL/api/anomalies"
 docker compose logs --since=5m app
 ```
 
@@ -1000,7 +1017,7 @@ From another terminal:
 
 ```bash
 curl --fail http://localhost:8080/actuator/health
-curl --fail http://localhost:8080/api/anomalies
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail http://localhost:8080/api/anomalies
 ```
 
 Use `/actuator/health` here; the Docker profile explicitly enables the readiness
@@ -1104,8 +1121,8 @@ quality. `.github/workflows/ci.yml` defines these additional workflows.
 With the full stack running and Python 3 installed:
 
 ```bash
-python3 scripts/verify-rag-query.py "$BASE_URL"
-python3 scripts/verify-agent.py "$BASE_URL" SIM-001
+IIOT_ACCESS_TOKEN="$ACCESS_TOKEN" python3 scripts/verify-rag-query.py "$BASE_URL"
+IIOT_ACCESS_TOKEN="$ACCESS_TOKEN" python3 scripts/verify-agent.py "$BASE_URL" SIM-001
 ```
 
 The RAG script checks E204 quotes and E999 abstention. The agent script checks

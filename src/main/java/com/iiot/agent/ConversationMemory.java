@@ -31,6 +31,8 @@ final class ConversationMemory {
     }
 
     synchronized Session acquire(UUID id) {
+        var authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        String owner = authentication == null ? "internal" : authentication.getName();
         Instant now = clock.instant();
         sessions.values().removeIf(s -> !s.lock.isLocked() && !s.updated.plus(ttl).isAfter(now));
         Session session;
@@ -38,12 +40,12 @@ final class ConversationMemory {
             if (sessions.size() >= capacity) {
                 throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Conversation capacity reached; retry later");
             }
-            session = new Session(UUID.randomUUID(), now);
+            session = new Session(UUID.randomUUID(), now, owner);
             sessions.put(session.id, session);
         }
         else {
             session = sessions.get(id);
-            if (session == null) {
+            if (session == null || !session.owner.equals(owner)) {
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation unknown or expired; omit conversationId to start again");
             }
         }
@@ -63,11 +65,13 @@ final class ConversationMemory {
 
     static final class Session {
         final UUID id;
+        final String owner;
         final ReentrantLock lock = new ReentrantLock();
         final List<Turn> turns = new ArrayList<>();
         Instant updated;
 
-        Session(UUID id, Instant updated) {
+        Session(UUID id, Instant updated, String owner) {
+            this.owner = owner;
             this.id = id;
             this.updated = updated;
         }

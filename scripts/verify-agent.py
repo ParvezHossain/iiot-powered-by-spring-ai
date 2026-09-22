@@ -1,6 +1,7 @@
 """Live routing acceptance: python3 scripts/verify-agent.py [base-url] [machine-name-or-UUID]."""
 
 import json
+import os
 import sys
 import urllib.request
 
@@ -8,7 +9,7 @@ import urllib.request
 def ask(base, question):
     request = urllib.request.Request(base.rstrip('/') + '/api/agent/chat',
         data=json.dumps({'question': question}).encode(),
-        headers={'Content-Type': 'application/json'}, method='POST')
+        headers={'Content-Type': 'application/json', 'Authorization': 'Bearer ' + os.environ['IIOT_ACCESS_TOKEN']}, method='POST')
     with urllib.request.urlopen(request, timeout=600) as response:
         return json.load(response)
 

@@ -20,7 +20,7 @@ def main():
     # Do not inherit connection settings or JVM/Maven overrides into the isolated demo.
     for key in list(env):
         if key.startswith(('SPRING_', 'RAG_', 'AGENT_', 'MCP_', 'SIMULATOR_', 'OLLAMA_', 'MAVEN_', 'SUREFIRE_',
-                           'ALERTS_', 'ALERT_EMAIL_', 'GMAIL_')):
+                           'AUTH_', 'INITIAL_ADMIN_', 'ALERTS_', 'ALERT_EMAIL_', 'GMAIL_')):
             env.pop(key)
     for key in ('JAVA_TOOL_OPTIONS', 'JDK_JAVA_OPTIONS', '_JAVA_OPTIONS'):
         env.pop(key, None)

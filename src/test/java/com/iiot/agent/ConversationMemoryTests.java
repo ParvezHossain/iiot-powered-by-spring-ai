@@ -46,6 +46,24 @@ class ConversationMemoryTests {
     }
 
     @Test
+    void conversationBelongsToItsAuthenticatedCreator() {
+        var context = org.springframework.security.core.context.SecurityContextHolder.getContext();
+        try {
+            context.setAuthentication(new org.springframework.security.authentication.TestingAuthenticationToken("alice", null));
+            var memory = new ConversationMemory();
+            var session = memory.acquire(null);
+            memory.release(session, true);
+            context.setAuthentication(new org.springframework.security.authentication.TestingAuthenticationToken("bob", null));
+            assertThatThrownBy(() -> memory.acquire(session.id)).isInstanceOfSatisfying(ResponseStatusException.class,
+                    e -> assertThat(e.getStatusCode().value()).isEqualTo(404));
+            context.setAuthentication(new org.springframework.security.authentication.TestingAuthenticationToken("alice", null));
+            memory.release(memory.acquire(session.id), true);
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+    }
+
+    @Test
     void retainsOnlyRecentTurnsWithinCharacterBudget() {
         var memory = new ConversationMemory();
         var session = memory.acquire(null);

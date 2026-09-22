@@ -1,5 +1,13 @@
 # Interactive API documentation
 
+> REST APIs now require JWT authentication. Use `/api/auth/login`, then enter the
+> returned access token in **Authorize**. Document ingestion and `/api/admin/**`
+> require ADMIN. Public auth routes, health and documentation remain accessible.
+> See [Authentication](authentication.md) for setup, refresh, bootstrap and examples.
+> Older curl examples below require `-H "Authorization: Bearer $ACCESS_TOKEN"`
+> when calling `/api/**` business endpoints.
+
+
 Run `./mvnw spring-boot:run` or start the Docker stack described in the README.
 
 - Swagger UI: <http://localhost:8080/swagger-ui/index.html> (`/swagger-ui.html` redirects here).
@@ -29,9 +37,10 @@ The default H2 development mode exposes telemetry and health. The full AI Compos
 stack also exposes documents, RAG, and chat. Disabled controllers do not appear
 in Swagger. Simulator and alert workers have no HTTP endpoints.
 
-REST and health require no authentication. No global bearer requirement is added
-to the specification. Errors document status and meaning; their body is managed
-by Spring Boot and can vary with error configuration. A successful AI response
+REST requires JWT bearer authentication. The specification declares a global
+bearer requirement with public authentication operation overrides. Health is
+public. Authentication errors use consistent status/message bodies; existing
+business errors retain Spring Boot conventions. A successful AI response
 can still have `insufficientEvidence=true`; inspect that field and the evidence.
 
 ## MCP

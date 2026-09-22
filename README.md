@@ -1,5 +1,13 @@
 # IIoT Powered by AI
 
+> **Authentication setup:** REST APIs now require JWT bearer tokens. Before starting,
+> set `AUTH_JWT_SECRET` and the three `INITIAL_ADMIN_*` values in `.env` (Docker)
+> or your shell environment (host execution). Follow [Authentication](docs/authentication.md)
+> for registration/login, token refresh, admin APIs and complete configuration.
+> Obtain `ACCESS_TOKEN` using that guide before running the business API examples below.
+> Health and Swagger remain public; MCP continues to use its separate `MCP_API_KEY`.
+
+
 [![CI](https://github.com/ParvezHossain/iiot-powered-by-ai/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/ParvezHossain/iiot-powered-by-ai/actions/workflows/ci.yml)
 
 A local Industrial IoT demo that combines live simulated telemetry, equipment
@@ -145,8 +153,8 @@ five seconds. Retrieve a real UUID and its latest status:
 ```sh
 MACHINE_ID=$(docker compose exec -T postgres psql -U iiot -d iiot -Atc \
   "SELECT id FROM telemetry.machines WHERE name = 'SIM-001';")
-curl --fail "http://localhost:8080/api/machines/$MACHINE_ID/status"
-curl --fail http://localhost:8080/api/anomalies
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail "http://localhost:8080/api/machines/$MACHINE_ID/status"
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail http://localhost:8080/api/anomalies
 ```
 
 An empty anomaly list can be expected during warm-up; it does not certify machine
@@ -156,9 +164,9 @@ simulator injects a spike/dropout every twelve batches (roughly one minute).
 Check retrieval and a grounded knowledge answer:
 
 ```sh
-curl --fail --get http://localhost:8080/api/documents/search \
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail --get http://localhost:8080/api/documents/search \
   --data-urlencode 'query=What does E204 mean?' --data-urlencode 'topK=3'
-curl --fail http://localhost:8080/api/rag/query \
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail http://localhost:8080/api/rag/query \
   -H 'Content-Type: application/json' -d '{"question":"What does E204 mean?"}'
 ```
 
@@ -169,7 +177,7 @@ invalid generated answer returns `insufficientEvidence=true`.
 Ask a mixed question through the agent:
 
 ```sh
-curl --fail http://localhost:8080/api/agent/chat \
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail http://localhost:8080/api/agent/chat \
   -H 'Content-Type: application/json' \
   -d '{"question":"Is SIM-001 vibration normal, and what should I do if not?"}'
 ```
@@ -180,9 +188,9 @@ and send these two follow-ups with the same ID:
 
 ```sh
 CONVERSATION_ID=replace-with-returned-uuid
-curl --fail http://localhost:8080/api/agent/chat -H 'Content-Type: application/json' \
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail http://localhost:8080/api/agent/chat -H 'Content-Type: application/json' \
   -d "{\"conversationId\":\"$CONVERSATION_ID\",\"question\":\"What is its latest vibration reading?\"}"
-curl --fail http://localhost:8080/api/agent/chat -H 'Content-Type: application/json' \
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail http://localhost:8080/api/agent/chat -H 'Content-Type: application/json' \
   -d "{\"conversationId\":\"$CONVERSATION_ID\",\"question\":\"And what about last week?\"}"
 ```
 
@@ -226,7 +234,7 @@ npx @modelcontextprotocol/inspector --cli http://localhost:8080/mcp --transport 
   --header "Authorization: Bearer $MCP_API_KEY" --method tools/list
 ```
 
-REST/chat have no user authentication; MCP authentication applies only to `/mcp`.
+REST/chat require user JWTs; the separate MCP service key applies only to `/mcp`.
 Compose binds all published ports to localhost. This is a local demo deployment,
 not a public multi-tenant service.
 

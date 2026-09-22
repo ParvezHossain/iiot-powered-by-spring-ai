@@ -21,6 +21,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class TelemetryApiTests {
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
+    @Autowired org.springframework.web.context.WebApplicationContext context;
+    @Autowired com.iiot.auth.AuthService authentication;
+    @Autowired com.iiot.auth.AuthProperties authProperties;
     private UUID machine;
     private UUID other;
     private static final String FROM = "2026-09-07T12:00:00Z";
@@ -28,6 +31,10 @@ class TelemetryApiTests {
 
     @BeforeEach
     void seed() {
+        String access = authentication.login(authProperties.initialAdminUsername(), authProperties.initialAdminPassword()).accessToken();
+        mvc = org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup(context)
+                .apply(org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity())
+                .defaultRequest(get("/").header("Authorization", "Bearer " + access)).build();
         machine = UUID.randomUUID();
         other = UUID.randomUUID();
         for (UUID id : new UUID[]{machine, other}) {

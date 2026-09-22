@@ -1,5 +1,6 @@
 # Base stack: telemetry and log alerts, with AI features opt-in.
-# For automatic model setup + RAG/chat/MCP, see .env.example and README.md.
+# For automatic model setup + RAG/chat/MCP, see .env and README.md.
+
 services:
   postgres:
     image: pgvector/pgvector:pg17
@@ -37,36 +38,67 @@ services:
   app:
     build: .
     environment:
+      # Authentication
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?Set AUTH_JWT_SECRET to a generated base64 secret}
+      AUTH_ISSUER: ${AUTH_ISSUER:-iiot-api}
+      AUTH_AUDIENCE: ${AUTH_AUDIENCE:-iiot-spa}
+      AUTH_ACCESS_TTL: ${AUTH_ACCESS_TTL:-PT15M}
+      AUTH_REFRESH_TTL: ${AUTH_REFRESH_TTL:-P7D}
+      AUTH_BCRYPT_STRENGTH: ${AUTH_BCRYPT_STRENGTH:-12}
+      AUTH_MAX_LOGIN_ATTEMPTS: ${AUTH_MAX_LOGIN_ATTEMPTS:-5}
+      AUTH_LOCKOUT: ${AUTH_LOCKOUT:-PT15M}
+      AUTH_REQUESTS_PER_MINUTE: ${AUTH_REQUESTS_PER_MINUTE:-30}
+      AUTH_CORS_ORIGINS: ${AUTH_CORS_ORIGINS:-}
+
+      # Required for the first administrator.
+      AUTH_INITIAL_ADMIN_USERNAME: ${AUTH_INITIAL_ADMIN_USERNAME:?Set AUTH_INITIAL_ADMIN_USERNAME}
+      AUTH_INITIAL_ADMIN_EMAIL: ${AUTH_INITIAL_ADMIN_EMAIL:?Set AUTH_INITIAL_ADMIN_EMAIL}
+      AUTH_INITIAL_ADMIN_PASSWORD: ${AUTH_INITIAL_ADMIN_PASSWORD:?Set AUTH_INITIAL_ADMIN_PASSWORD}
+
+      # Spring profile and PostgreSQL
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/iiot
       SPRING_DATASOURCE_USERNAME: iiot
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-iiot_dev}
+
+      # Ollama and RAG
       OLLAMA_BASE_URL: http://ollama:11434
       RAG_ENABLED: ${RAG_ENABLED:-false}
       RAG_INGEST_ON_STARTUP: ${RAG_INGEST_ON_STARTUP:-true}
       RAG_BATCH_SIZE: ${RAG_BATCH_SIZE:-16}
       RAG_ANSWER_MODEL: ${RAG_ANSWER_MODEL:-qwen2.5:1.5b}
+
+      # Agent
       AGENT_ENABLED: ${AGENT_ENABLED:-false}
+      AGENT_MODEL: ${AGENT_MODEL:-qwen2.5:1.5b}
+
+      # MCP
       MCP_ENABLED: ${MCP_ENABLED:-false}
       MCP_API_KEY: ${MCP_API_KEY:-}
+
+      # Alerts
       ALERTS_ENABLED: ${ALERTS_ENABLED:-true}
       ALERTS_GMAIL_ENABLED: ${ALERTS_GMAIL_ENABLED:-false}
       GMAIL_USERNAME: ${GMAIL_USERNAME:-}
       GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-}
       ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
-      AGENT_MODEL: ${AGENT_MODEL:-qwen2.5:1.5b}
+
+      # Simulator
       SIMULATOR_ENABLED: ${SIMULATOR_ENABLED:-true}
       SIMULATOR_MACHINE_COUNT: ${SIMULATOR_MACHINE_COUNT:-5}
       SIMULATOR_INTERVAL_MS: ${SIMULATOR_INTERVAL_MS:-5000}
       SIMULATOR_ANOMALY_EVERY_TICKS: ${SIMULATOR_ANOMALY_EVERY_TICKS:-12}
       SIMULATOR_SEED: ${SIMULATOR_SEED:-42}
+
     ports:
       - "127.0.0.1:${APP_PORT:-8080}:8080"
+
     depends_on:
       postgres:
         condition: service_healthy
       ollama:
         condition: service_healthy
+
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health/readiness"]
       interval: 5s
