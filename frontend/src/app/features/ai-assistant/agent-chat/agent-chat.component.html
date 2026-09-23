@@ -1,40 +1,63 @@
 <section aria-labelledby="chat-heading" class="border-t border-muted p-5 sm:p-6">
-  <div class="flex items-center justify-between gap-3">
-    <h3 id="chat-heading" class="text-sm font-semibold text-white">Agent chat</h3>
-    <button type="button" (click)="store.newConversation()" class="text-xs text-violet-300" [disabled]="store.chatBusy()">New conversation</button>
-  </div>
-  <p class="mt-2 text-xs leading-5 text-slate-400">Investigate signals with telemetry and equipment tools.</p>
-  <div #transcript role="log" aria-label="Agent conversation" aria-live="polite" tabindex="0" class="mt-4 max-h-[36rem] space-y-4 overflow-y-auto pr-2">
-    @for (message of store.messages(); track $index) {
-      <article class="rounded-xl border p-4" [class]="message.role === 'user' ? 'ml-6 border-indigo-500/30 bg-indigo-500/10' : 'mr-2 border-muted bg-deep/70'">
-        <p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-violet-300">{{ message.role === 'user' ? 'You' : 'AI Agent' }}</p>
-        @if (message.response?.insufficientEvidence) { <p class="ai-warning">Insufficient evidence</p> }
-        <p class="whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">{{ message.text }}</p>
-        @if (message.response; as response) {
-          @if (response.evidence.length) {
-            <details class="mt-4 border-t border-muted pt-3">
-              <summary class="text-xs text-violet-200">Tool executions ({{ response.evidence.length }})</summary>
-              <p class="mt-2 text-[11px] text-slate-400">Completed trace returned with this answer.</p>
-              @for (tool of response.evidence; track $index) {
-                <details class="mt-3 rounded-lg border border-muted p-3">
-                  <summary class="break-words text-xs text-slate-300">[{{ tool.id }}] {{ tool.tool }} · {{ tool.success ? 'Succeeded' : 'Failed' }}{{ response.evidenceIds.includes(tool.id) ? ' · Cited' : '' }}</summary>
-                  <p class="mb-1 mt-3 text-[11px] text-slate-400">Input parameters</p>
-                  <pre class="ai-code">{{ format(tool.input) }}</pre>
-                  <p class="mb-1 mt-3 text-[11px] text-slate-400">Output</p>
-                  <pre class="ai-code">{{ format(tool.result) }}</pre>
-                </details>
-              }
-            </details>
-          } @else { <p class="mt-3 text-[11px] text-slate-400">No tools were invoked for this answer.</p> }
+    <div class="flex items-center justify-between gap-3">
+        <h3 id="chat-heading" class="text-sm font-semibold text-white">Agent chat</h3>
+        <button type="button" (click)="store.newConversation()" class="text-xs text-violet-300"
+                [disabled]="store.chatBusy()">New conversation
+        </button>
+    </div>
+    <p class="mt-2 text-xs leading-5 text-slate-400">Investigate signals with telemetry and equipment tools.</p>
+    <div #transcript role="log" aria-label="Agent conversation" aria-live="polite" tabindex="0"
+         class="mt-4 max-h-[36rem] space-y-4 overflow-y-auto pr-2">
+        @for (message of store.messages(); track $index) {
+            <article class="rounded-xl border p-4"
+                     [class]="message.role === 'user' ? 'ml-6 border-indigo-500/30 bg-indigo-500/10' : 'mr-2 border-muted bg-deep/70'">
+                <p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-violet-300">{{ message.role === 'user' ? 'You' : 'AI Agent' }}</p>
+                @if (message.response?.insufficientEvidence) {
+                    <p class="ai-warning">Insufficient evidence</p>
+                }
+                <p class="whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">{{ message.text }}</p>
+                @if (message.response; as response) {
+                    @if (response.evidence.length) {
+                        <details class="mt-4 border-t border-muted pt-3">
+                            <summary class="text-xs text-violet-200">Tool executions ({{ response.evidence.length }})
+                            </summary>
+                            <p class="mt-2 text-[11px] text-slate-400">Completed trace returned with this answer.</p>
+                            @for (tool of response.evidence; track $index) {
+                                <details class="mt-3 rounded-lg border border-muted p-3">
+                                    <summary class="break-words text-xs text-slate-300">[{{ tool.id }}] {{ tool.tool }}
+                                        · {{ tool.success ? 'Succeeded' : 'Failed' }}{{ response.evidenceIds.includes(tool.id) ? ' · Cited' : '' }}
+                                    </summary>
+                                    <p class="mb-1 mt-3 text-[11px] text-slate-400">Input parameters</p>
+                                    <pre class="ai-code">{{ format(tool.input) }}</pre>
+                                    <p class="mb-1 mt-3 text-[11px] text-slate-400">Output</p>
+                                    <pre class="ai-code">{{ format(tool.result) }}</pre>
+                                </details>
+                            }
+                        </details>
+                    } @else {
+                        <p class="mt-3 text-[11px] text-slate-400">No tools were invoked for this answer.</p>
+                    }
+                }
+            </article>
+        } @empty {
+            <p class="py-4 text-xs text-slate-400">Ask a question to start a conversation.</p>
         }
-      </article>
-    } @empty { <p class="py-4 text-xs text-slate-400">Ask a question to start a conversation.</p> }
-    @if (store.chatBusy()) { <p role="status" class="rounded-lg bg-violet-500/10 p-3 text-xs text-violet-200 motion-safe:animate-pulse">Agent is working. Tool results will appear with the answer…</p> }
-  </div>
-  @if (store.chatError()) { <p role="alert" class="mt-4 text-xs text-amber-300">{{ store.chatError() }}</p> }
-  <form (ngSubmit)="store.send()" class="mt-5 space-y-3">
-    <label for="agent-question" class="block text-xs text-slate-300">Message the agent</label>
-    <textarea id="agent-question" name="question" [ngModel]="store.chatQuestion()" (ngModelChange)="store.chatQuestion.set($event)" required maxlength="2000" rows="3" [disabled]="!store.auth.isAdmin() || store.chatBusy()" placeholder="What could explain a rise in vibration on SIM-001?" class="ai-input"></textarea>
-    <button type="submit" class="ai-button" [disabled]="!store.auth.isAdmin() || store.chatBusy() || !store.chatQuestion().trim()">{{ store.chatBusy() ? 'Waiting for reply…' : 'Send message' }}</button>
-  </form>
+        @if (store.chatBusy()) {
+            <p role="status" class="rounded-lg bg-violet-500/10 p-3 text-xs text-violet-200 motion-safe:animate-pulse">
+                Agent is working. Tool results will appear with the answer…</p>
+        }
+    </div>
+    @if (store.chatError()) {
+        <p role="alert" class="mt-4 text-xs text-amber-300">{{ store.chatError() }}</p>
+    }
+    <form (ngSubmit)="store.send()" class="mt-5 space-y-3">
+        <label for="agent-question" class="block text-xs text-slate-300">Message the agent</label>
+        <textarea id="agent-question" name="question" [ngModel]="store.chatQuestion()"
+                  (ngModelChange)="store.chatQuestion.set($event)" required maxlength="2000" rows="3"
+                  [disabled]="!store.auth.isAdmin() || store.chatBusy()"
+                  placeholder="What could explain a rise in vibration on SIM-001?" class="ai-input"></textarea>
+        <button type="submit" class="ai-button"
+                [disabled]="!store.auth.isAdmin() || store.chatBusy() || !store.chatQuestion().trim()">{{ store.chatBusy() ? 'Waiting for reply…' : 'Send message' }}
+        </button>
+    </form>
 </section>

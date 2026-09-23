@@ -185,6 +185,48 @@ describe('Authentication state and bearer pipeline', () => {
     expect(auth.bearerToken()).toBeNull();
   });
 
+  it('registers without role injection or bearer credentials', () => {
+    const created = vi.fn();
+    auth.register({ username: 'new-user', email: 'new@example.test', password: 'long-password', ...{ role: 'ADMIN' } }).subscribe(created);
+    const req = requests.expectOne('/api/auth/register');
+    expect(req.request.body).toEqual({ username: 'new-user', email: 'new@example.test', password: 'long-password' });
+    expect(req.request.headers.has('Authorization')).toBe(false);
+    req.flush(response.user); expect(created).toHaveBeenCalledWith(response.user);
+    expect(auth.isAuthenticated()).toBe(false);
+  });
+
+  it('rotates both tokens once and uses the new refresh token for logout', () => {
+    login(); auth.refresh().subscribe();
+    const duplicate = vi.fn(); auth.refresh().subscribe({ error: duplicate });
+    expect(duplicate).toHaveBeenCalledOnce();
+    const req = requests.expectOne('/api/auth/refresh');
+    expect(req.request.body).toEqual({ refreshToken: 'test-refresh' });
+    expect(req.request.headers.has('Authorization')).toBe(false);
+    req.flush({ ...response, accessToken: 'rotated-access', refreshToken: 'rotated-refresh' });
+    expect(auth.accessToken()).toBe('rotated-access'); expect(auth.busy()).toBe(false);
+    auth.logout().subscribe();
+    const logout = requests.expectOne('/api/auth/logout');
+    expect(logout.request.body.refreshToken).toBe('rotated-refresh'); logout.flush(null);
+  });
+
+  it('discards the session on refresh failure without retrying a single-use token', () => {
+    login(); auth.refresh().subscribe({ error: () => {} });
+    requests.expectOne('/api/auth/refresh').flush({}, { status: 401, statusText: 'Unauthorized' });
+    expect(auth.accessToken()).toBeNull(); expect(auth.loginVisible()).toBe(true); expect(auth.busy()).toBe(false);
+    requests.expectNone('/api/auth/refresh');
+  });
+
+  it('cannot restore a logged-out session with a late refresh response', () => {
+    login(); auth.refresh().subscribe(); const req = requests.expectOne('/api/auth/refresh');
+    auth.logout().subscribe(); requests.expectOne('/api/auth/logout').flush(null);
+    req.flush({ ...response, accessToken: 'late' }); expect(auth.accessToken()).toBeNull();
+  });
+
+  it('discards credentials if a refresh is cancelled after it may have reached the server', () => {
+    login(); const subscription = auth.refresh().subscribe(); const req = requests.expectOne('/api/auth/refresh');
+    subscription.unsubscribe(); expect(req.cancelled).toBe(true); expect(auth.accessToken()).toBeNull(); expect(auth.loginVisible()).toBe(true);
+  });
+
   it('rejects malformed or disabled login responses', () => {
     auth.login({ usernameOrEmail: 'operator', password: 'test-password' }).subscribe({ error: () => {} });
     requests.expectOne('/api/auth/login').flush({ ...response, user: { ...response.user, enabled: false } });

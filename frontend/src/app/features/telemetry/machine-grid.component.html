@@ -36,6 +36,7 @@
           </button>
         }
       </div>
+      @if (store.selectedMachineId(); as id) { <a routerLink="/machine-status" [queryParams]="{ id: id }" class="mt-4 block text-xs text-indigo-300">Inspect selected machine status →</a> }
       <p class="mt-4 text-[11px] text-slate-400">Last checked {{ store.fleet().updatedAt | date:'mediumTime' }} · Card values are the latest stored samples.</p>
     }
   </div>

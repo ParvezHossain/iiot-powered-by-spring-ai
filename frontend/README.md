@@ -189,8 +189,8 @@ supports focus management, Escape/cancel, browser autofill, and inline errors.
 Tokens are stored **only in memory**, using the signal option requested in the
 prompt. Neither localStorage nor sessionStorage is used. Reloading or opening a
 new tab requires sign-in. The refresh token is retained privately for logout
-revocation; automatic refresh and persistent sessions are not implemented in
-this phase. Access expiration clears the session and opens login. Browser storage
+revocation and explicit renewal from the Account page. Automatic refresh and
+persistent sessions are not implemented. Use **Renew session** before expiration; access expiration clears the session and opens login. Browser storage
 would extend token exposure beyond the page lifetime, so it is intentionally not
 used. This does not make tokens immune to malicious scripts running in the page.
 
@@ -338,3 +338,19 @@ Manual check:
 `npm test` covers requests, conversation reuse/reset, session cancellation,
 authorization gating, timeouts, rendering of evidence and tool traces, safe text
 rendering, and transcript scrolling. `npm run build` verifies production templates.
+
+## Additional API workflows
+
+The header keeps Dashboard and Machine status in the primary navigation.
+The Administration dropdown groups Users, Documents, and MCP tools for ADMINs.
+The account menu at the top right contains Account and Sign out, with username
+and role shown together. Active routes are highlighted; menus close on navigation,
+outside interaction, or Escape. Model information appears in the footer. See [the complete API coverage and verification guide](../docs/frontend-api-coverage.md).
+Registration never accepts role fields. Renew session rotates both in-memory tokens
+without retrying a single-use refresh token; failure/cancellation requires sign-in.
+Views tied to the old token are cleared on renewal. Admin user mutations revoke the
+affected account's sessions. Document ingestion requires explicit corpus replacement
+selection. MCP uses authenticated fetch for streaming, initializes session headers,
+and supports discovery, calls, GET events and DELETE closure. No requests are
+silently replayed. Leaving a page cancels browser work; the server may still finish
+an operation that already started.

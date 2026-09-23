@@ -1,0 +1,53 @@
+<section class="panel mx-auto max-w-2xl p-6">
+    <h1 class="text-xl font-semibold text-white">Account</h1>
+    @if (auth.isAuthenticated()) {
+        <p class="mt-3 text-sm text-slate-300">{{ auth.currentUser()?.username }} · {{ auth.currentUser()?.role }}</p>
+        <p class="mt-2 text-xs text-slate-400">Renew your session before it expires. Tokens stay in this tab's memory;
+            renewing clears open views tied to the old token.</p>
+        <div class="mt-4 flex flex-wrap gap-3">
+            <button class="ai-button" (click)="loadProfile()" [disabled]="busy() || auth.busy()">Load account details
+            </button>
+            <button class="ai-button" (click)="refresh()"
+                    [disabled]="busy() || auth.busy()">{{ auth.busy() ? 'Renewing…' : 'Renew session' }}
+            </button>
+        </div>
+        @if (profile(); as user) {
+            <dl class="mt-5 space-y-2 break-words text-sm">
+                <dt class="text-slate-400">Email</dt>
+                <dd>{{ user.email }}</dd>
+                <dt class="text-slate-400">Account ID</dt>
+                <dd>{{ user.id }}</dd>
+                <dt class="text-slate-400">Status</dt>
+                <dd>{{ user.enabled ? 'Enabled' : 'Disabled' }}</dd>
+            </dl>
+        }
+    } @else {
+        <p class="mt-3 text-sm text-slate-400">Create an operator account. An administrator can grant additional access
+            later.</p>
+        <form #form="ngForm" (ngSubmit)="register()" class="mt-5 space-y-4">
+            <label class="block text-sm">Username<input name="username" [(ngModel)]="username" required
+                                                        pattern="[A-Za-z0-9_.-]{3,64}" maxlength="64"
+                                                        autocomplete="username" class="ai-input"
+                                                        [disabled]="busy()"></label>
+            <p class="text-xs text-slate-400">3–64 letters, digits, dots, underscores or hyphens.</p>
+            <label class="block text-sm">Email<input name="email" [(ngModel)]="email" type="email" required email
+                                                     maxlength="254" autocomplete="email" class="ai-input"
+                                                     [disabled]="busy()"></label>
+            <label class="block text-sm">Password<input name="password" [(ngModel)]="password" type="password" required
+                                                        minlength="12" maxlength="72" autocomplete="new-password"
+                                                        class="ai-input" [disabled]="busy()"></label>
+            <p class="text-xs text-slate-400">At least 12 characters; at most 72 UTF-8 bytes. Passwords are not
+                trimmed.</p>
+            <button class="ai-button" type="submit"
+                    [disabled]="busy() || form.invalid || !validIdentity(username,email,password)">{{ busy() ? 'Creating…' : 'Create account' }}
+            </button>
+            <button class="ml-4 text-sm text-indigo-300" type="button" (click)="auth.openLogin()">Sign in</button>
+        </form>
+    }
+    @if (message()) {
+        <p role="status" class="mt-4 text-sm text-emerald-300">{{ message() }}</p>
+    }
+    @if (error()) {
+        <p role="alert" class="mt-4 text-sm text-amber-300">{{ error() }}</p>
+    }
+</section>

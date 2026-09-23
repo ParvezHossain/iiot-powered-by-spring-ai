@@ -1,4 +1,4 @@
-> **Angular workspace (Phases 1.1–3.1):** `./mvnw package` now builds `frontend/` and
+> **Angular workspace:** `./mvnw package` now builds `frontend/` and
 > bundles the public UI at `http://localhost:8080/`. Docker builds include it too.
 > Use `-Dskip.frontend=true` for backend-only Maven work. See
 > [frontend/README.md](frontend/README.md) for setup and SPA routing details.
@@ -53,8 +53,11 @@ After the full-stack setup you will have:
 - An AI chat endpoint and an authenticated MCP endpoint for compatible clients.
 
 The project uses Java 21, Spring Boot 4.1.1, Spring AI 2.0.1, Flyway database
-migrations, and the MCP Java SDK. There is no separate frontend application;
-start exploring through curl and Swagger UI.
+migrations, and the MCP Java SDK. Spring Boot serves the Angular workspace at `/`.
+Use its navigation to explore accounts, telemetry, user administration, documents,
+and MCP tools; the dashboard also includes RAG and agent chat.
+See [frontend API coverage](docs/frontend-api-coverage.md) for the complete screen map.
+Curl and Swagger UI remain available.
 
 ```text
 curl / Swagger / chat client ──> Spring Boot app ──> PostgreSQL + pgvector
@@ -855,7 +858,7 @@ then reports a tool error. Default host/origin checks accept local addresses;
 this configuration is intended for local clients.
 
 Implementation: `src/main/java/com/iiot/mcp/EquipmentMcpConfiguration.java` and
-`McpApiKeyFilter.java`. See [MCP server](docs/mcp-server.md) for the full contract.
+`SecurityConfiguration.java`. See [MCP server](docs/mcp-server.md) for the full contract.
 
 ## 14. Explore Anomaly Detection
 
@@ -1343,7 +1346,7 @@ the lab; use the related section when you want to repeat a behavior.
 | 9 | `src/main/java/com/iiot/rag/EquipmentDocumentLoader.java`, `EquipmentIngestionService.java`, `NomicEmbeddingModel.java` in the same package | Metadata, section chunks, deterministic IDs, transaction rollback, embedding prefixes | 11 |
 | 10 | `src/main/java/com/iiot/rag/RagConfiguration.java`, `EquipmentSearchController.java`, `RagAnswerService.java` in the same package | Vector setup, model options, retrieval, quote/code validation, abstention | 11 |
 | 11 | `src/main/java/com/iiot/telemetry/TelemetryTools.java`, `src/main/java/com/iiot/agent/` | `AgentKnowledgeTools.java`, `AgentService.java`, `ConversationMemory.java`: callbacks, model choices, evidence checks, bounded memory | 12 |
-| 12 | `src/main/java/com/iiot/mcp/` | `EquipmentMcpConfiguration.java` and `McpApiKeyFilter.java`: SDK transport, three tools, bearer scope | 13 |
+| 12 | `src/main/java/com/iiot/mcp/` | `EquipmentMcpConfiguration.java` and `SecurityConfiguration.java`: SDK transport, three tools, bearer scope | 13 |
 | 13 | `src/main/java/com/iiot/alert/` | `AnomalyAlertService.java` and `AlertConfiguration.java`: live monitoring window, deduplication, SMTP/retries | 15 |
 | 14 | `src/main/java/com/iiot/config/OpenApiConfiguration.java` and controller/model annotations | API metadata, schemas, feature-dependent documentation | 16 |
 | 15 | `src/test/java/com/iiot/`, especially `demo/InterviewDemoTests.java` and `config/OpenApiDocumentationTests.java` | How fixtures isolate model behavior and how contracts are asserted | 18–19 |

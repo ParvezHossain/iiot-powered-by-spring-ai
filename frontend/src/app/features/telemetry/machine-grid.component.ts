@@ -1,4 +1,5 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { Component, inject } from '@angular/core';
 import { MachineStatus, MachineOperatingState } from '../../core/models';
 import { METRICS, TelemetryStore } from './telemetry.store';
@@ -6,7 +7,7 @@ import { METRICS, TelemetryStore } from './telemetry.store';
 @Component({
   selector: 'app-machine-grid',
   host: { class: 'block min-w-0' },
-  imports: [DecimalPipe, DatePipe],
+  imports: [DecimalPipe, DatePipe, RouterLink],
   templateUrl: './machine-grid.component.html',
 })
 export class MachineGridComponent {

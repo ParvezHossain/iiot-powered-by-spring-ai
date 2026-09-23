@@ -1,32 +1,51 @@
 <section aria-labelledby="rag-heading" class="p-5 sm:p-6">
-  <h3 id="rag-heading" class="text-sm font-semibold text-white">Equipment knowledge</h3>
-  <p class="mt-1 text-xs leading-5 text-slate-400">Search your manuals for an answer backed by source quotes.</p>
-  <form (ngSubmit)="store.search()" class="mt-4 space-y-3">
-    <label for="rag-question" class="block text-xs text-slate-300">Ask a question</label>
-    <textarea id="rag-question" name="question" [ngModel]="store.ragQuestion()" (ngModelChange)="store.ragQuestion.set($event)" required maxlength="2000" rows="2" [disabled]="!store.auth.isAdmin() || store.ragBusy()" placeholder="What does the maintenance manual recommend?" class="ai-input"></textarea>
-    <button type="submit" class="ai-button" [disabled]="!store.auth.isAdmin() || store.ragBusy() || !store.ragQuestion().trim()">{{ store.ragBusy() ? 'Searching…' : 'Search knowledge' }}</button>
-  </form>
-  @if (store.ragError()) { <p role="alert" class="mt-4 text-xs text-amber-300">{{ store.ragError() }}</p> }
-  @if (store.ragBusy()) {
-    <div role="status" aria-label="Searching sources and generating an answer" class="mt-5 space-y-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-4">
-      <p class="text-xs text-violet-200">Searching sources and generating an answer…</p>
-      <div aria-hidden="true" class="space-y-3 motion-safe:animate-pulse"><div class="h-3 rounded bg-ai-gradient opacity-40"></div><div class="h-3 w-5/6 rounded bg-ai-gradient opacity-30"></div><div class="h-3 w-2/3 rounded bg-ai-gradient opacity-20"></div></div>
-    </div>
-  }
-  @if (store.ragAnswer(); as answer) {
-    <article class="mt-5 rounded-xl border border-violet-500/30 bg-deep/70 p-4" aria-label="Knowledge answer">
-      @if (answer.insufficientEvidence) { <p role="status" class="ai-warning">Insufficient evidence</p> }
-      <p class="whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">{{ answer.answer }}</p>
-    </article>
-    <h4 class="mb-3 mt-5 text-xs font-semibold text-violet-200">Verified source quotes</h4>
-    @for (citation of answer.citations; track $index) {
-      <figure class="mb-3 min-w-0 rounded-r-lg border-l-[3px] border-[#8B5CF6] bg-deep/70 p-4">
-        <blockquote class="whitespace-pre-wrap break-words text-xs leading-6 text-slate-200">{{ citation.quote }}</blockquote>
-        <figcaption class="mt-3 space-y-1 break-words text-[11px] text-slate-400">
-          <p class="text-violet-300">[{{ citation.sourceId }}]</p>
-          <p>Document: {{ format(citation.documentId) }}</p><p>Section: {{ format(citation.section) }}</p>
-        </figcaption>
-      </figure>
-    } @empty { <p class="text-xs text-slate-400">No verified source quotes were returned.</p> }
-  }
+    <h3 id="rag-heading" class="text-sm font-semibold text-white">Equipment knowledge</h3>
+    <p class="mt-1 text-xs leading-5 text-slate-400">Search your manuals for an answer backed by source quotes.</p>
+    <form (ngSubmit)="store.search()" class="mt-4 space-y-3">
+        <label for="rag-question" class="block text-xs text-slate-300">Ask a question</label>
+        <textarea id="rag-question" name="question" [ngModel]="store.ragQuestion()"
+                  (ngModelChange)="store.ragQuestion.set($event)" required maxlength="2000" rows="2"
+                  [disabled]="!store.auth.isAdmin() || store.ragBusy()"
+                  placeholder="What does the maintenance manual recommend?" class="ai-input"></textarea>
+        <button type="submit" class="ai-button"
+                [disabled]="!store.auth.isAdmin() || store.ragBusy() || !store.ragQuestion().trim()">{{ store.ragBusy() ? 'Searching…' : 'Search knowledge' }}
+        </button>
+    </form>
+    @if (store.ragError()) {
+        <p role="alert" class="mt-4 text-xs text-amber-300">{{ store.ragError() }}</p>
+    }
+    @if (store.ragBusy()) {
+        <div role="status" aria-label="Searching sources and generating an answer"
+             class="mt-5 space-y-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-4">
+            <p class="text-xs text-violet-200">Searching sources and generating an answer…</p>
+            <div aria-hidden="true" class="space-y-3 motion-safe:animate-pulse">
+                <div class="h-3 rounded bg-ai-gradient opacity-40"></div>
+                <div class="h-3 w-5/6 rounded bg-ai-gradient opacity-30"></div>
+                <div class="h-3 w-2/3 rounded bg-ai-gradient opacity-20"></div>
+            </div>
+        </div>
+    }
+    @if (store.ragAnswer(); as answer) {
+        <article class="mt-5 rounded-xl border border-violet-500/30 bg-deep/70 p-4" aria-label="Knowledge answer">
+            @if (answer.insufficientEvidence) {
+                <p role="status" class="ai-warning">Insufficient evidence</p>
+            }
+            <p class="whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">{{ answer.answer }}</p>
+        </article>
+        <h4 class="mb-3 mt-5 text-xs font-semibold text-violet-200">Verified source quotes</h4>
+        @for (citation of answer.citations; track $index) {
+            <figure class="mb-3 min-w-0 rounded-r-lg border-l-[3px] border-[#8B5CF6] bg-deep/70 p-4">
+                <blockquote
+                        class="whitespace-pre-wrap break-words text-xs leading-6 text-slate-200">{{ citation.quote }}
+                </blockquote>
+                <figcaption class="mt-3 space-y-1 break-words text-[11px] text-slate-400">
+                    <p class="text-violet-300">[{{ citation.sourceId }}]</p>
+                    <p>Document: {{ format(citation.documentId) }}</p>
+                    <p>Section: {{ format(citation.section) }}</p>
+                </figcaption>
+            </figure>
+        } @empty {
+            <p class="text-xs text-slate-400">No verified source quotes were returned.</p>
+        }
+    }
 </section>

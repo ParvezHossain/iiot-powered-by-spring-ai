@@ -35,6 +35,16 @@ All three tools remain discoverable when RAG is disabled; `ragQuery` then return
 an MCP tool error explaining the required setup. With MCP disabled (the default),
 the servlet and MCP server are not registered.
 
+## Use the frontend
+
+Sign in as ADMIN and open **MCP tools** (`/mcp-tools`). Choose **Connect**, then
+**Discover tools**. Select a tool, inspect its input schema, enter JSON parameters,
+and choose **Run tool**. Results distinguish protocol errors from tool failures.
+**Open event stream** uses an authenticated GET; the stream can remain idle.
+**Close session** sends DELETE. Leaving the page or changing credentials stops
+browser streams and forgets local state; close first to terminate the server
+session explicitly. Session IDs come from initialization, not user-entered values.
+
 ## Connect an MCP client
 
 Select **Streamable HTTP**, enter the `/mcp` URL, and set the custom header

@@ -21,7 +21,7 @@ statistical deviations are not diagnoses or permission to operate equipment.
 
 ## Angular frontend and Maven build
 
-Phases 1.1–3.1 add an Angular 22 standalone workspace with routing and Tailwind CSS 4
+The UI uses an Angular 22 standalone workspace with routing and Tailwind CSS 4
 in [`frontend/`](frontend/README.md). Run `./mvnw package` to install pinned
 Node/npm locally, build the frontend, and package it with Spring Boot. Open
 `http://localhost:8080/` after starting the configured backend. Docker Compose
@@ -30,8 +30,10 @@ builds include the frontend automatically.
 The UI includes a dark control-room layout, model badges, live backend health,
 and a JWT sign-in dialog backed by the authentication API. Tokens stay in memory;
 reloading requires sign-in. The telemetry dashboard discovers machines and plots
-live readings with metric and time-window controls. Anomaly-feed and AI-chat
-integration remain subsequent phases. Rebuild and restart the backend to expose
+live readings with metric and time-window controls, an anomaly feed, RAG citations,
+and agent chat with tool traces. Account registration/session renewal, user
+administration, document ingestion/search, machine status lookup, and MCP tools
+are available from the workspace navigation. See the [API coverage map](docs/frontend-api-coverage.md). Rebuild and restart the backend to expose
 the new authenticated `GET /api/machines` discovery endpoint. The public UI shell does not bypass JWT or ADMIN requirements
 on business APIs. Browser deep links resolve to the Angular entry point; API and
 missing asset requests do not.

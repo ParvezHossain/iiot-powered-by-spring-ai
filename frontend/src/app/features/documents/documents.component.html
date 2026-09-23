@@ -1,0 +1,59 @@
+<section class="panel mx-auto max-w-4xl p-6">
+    <h1 class="text-xl font-semibold text-white">Equipment documents</h1>
+    @if (!auth.isAdmin()) {
+        <p role="status" class="mt-4 text-amber-200">An administrator account is required to search or replace the
+            corpus.</p>
+    } @else {
+        <p class="mt-3 text-sm text-slate-400">Find source passages directly by vector similarity, without generating an
+            answer.</p>
+        <form #form="ngForm" (ngSubmit)="search()" class="mt-5 space-y-4">
+            <label class="block">Search query<textarea class="ai-input" name="query" [(ngModel)]="query" required
+                                                       maxlength="2000" rows="2" [disabled]="busy()"></textarea></label>
+            <div class="flex flex-wrap gap-4"><label>Maximum matches<input class="ai-input" name="topK" type="number"
+                                                                           [(ngModel)]="topK" required min="1" max="20"
+                                                                           step="1" [disabled]="busy()"></label><label>Minimum
+                similarity<input class="ai-input" name="threshold" type="number" [(ngModel)]="threshold" required
+                                 min="0" max="1" step="0.05" [disabled]="busy()"></label></div>
+            <button class="ai-button" [disabled]="busy() || form.invalid || !query.trim()">Search passages</button>
+        </form>
+        @if (busy()) {
+            <p role="status" class="my-4 text-violet-200 motion-safe:animate-pulse">Processing documents…</p>
+        }
+        <div class="mt-6 space-y-4">
+            @for (match of results(); track match.id) {
+                <article class="rounded-r-xl border-l-[3px] border-violet-500 bg-deep p-4"><p
+                        class="whitespace-pre-wrap break-words text-sm leading-6">{{ match.text }}</p>
+                    <p class="mt-3 text-xs text-violet-200">Similarity: {{ match.score ?? 'Not provided' }} ·
+                        Chunk: {{ match.id }}</p>
+                    <details class="mt-3">
+                        <summary class="text-xs text-slate-400">Source metadata</summary>
+                        <pre class="ai-code mt-2">{{ format(match.metadata) }}</pre>
+                    </details>
+                </article>
+            }
+            @if (searched() && results().length === 0) {
+                <p role="status" class="text-slate-400">No passages met the similarity threshold.</p>
+            }
+        </div>
+        <section class="mt-8 border-t border-muted pt-6" aria-labelledby="ingest-heading"><h2 id="ingest-heading"
+                                                                                              class="font-semibold">
+            Replace equipment corpus</h2>
+            <p class="my-3 text-sm text-slate-400">Re-embed the configured server Markdown documents and transactionally
+                replace the equipment vectors. This can take several minutes. To change bundled documents, rebuild the
+                backend first.</p>
+            <label class="flex items-start gap-3 text-sm"><input type="checkbox" [(ngModel)]="replaceConfirmed"
+                                                                 [disabled]="busy()">Replace the existing equipment
+                corpus with the configured documents.</label>
+            <button class="ai-button mt-4" (click)="ingest()" [disabled]="busy() || !replaceConfirmed">Replace and embed
+                corpus
+            </button>
+            @if (ingestion(); as result) {
+                <p role="status" class="mt-4 text-emerald-300">Indexed {{ result.documents }} documents
+                    and {{ result.chunks }} chunks using {{ result.model }}.</p>
+            }
+        </section>
+    }
+    @if (error()) {
+        <p role="alert" class="mt-4 text-amber-300">{{ error() }}</p>
+    }
+</section>

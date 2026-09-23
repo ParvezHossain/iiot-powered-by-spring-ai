@@ -19,7 +19,7 @@ curl --fail http://localhost:8080/api/rag/query \
 
 Retain your stack's existing port overrides when rebuilding. For this workspace's
 stack, export `APP_PORT=8081` and `POSTGRES_PORT=5433` before the Compose commands,
-and use port 8081 in curl. The endpoint is registered only when RAG is enabled.
+and use port 8081 in curl. The endpoint requires ADMIN access and returns 503 when RAG is disabled.
 Chat model downloads are explicit; startup ingestion uses only the embedding
 model. A missing chat model is reported when answering a supported question.
 

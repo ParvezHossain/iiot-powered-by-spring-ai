@@ -3,7 +3,9 @@
 The existing Java 21 / Spring Boot 4.1.1 MVC backend now uses Spring Security's
 OAuth2 Resource Server and Nimbus JWT support. Controllers remain under `/api`;
 JDBC and Flyway remain the persistence mechanisms. There is no server session or
-server-rendered login. No frontend is included.
+server-rendered login. The Angular frontend provides registration and account
+details at `/account`, explicit session renewal, a sign-in dialog, and ADMIN user
+management at `/users`. See [frontend API coverage](frontend-api-coverage.md).
 
 ## Configuration and first startup
 

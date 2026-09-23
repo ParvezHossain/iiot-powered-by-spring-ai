@@ -1,42 +1,67 @@
 <section class="panel" aria-labelledby="anomalies-heading">
-  <div class="panel-heading">
-    <div class="flex items-center gap-3"><svg lucideTriangleAlert [size]="19" aria-hidden="true" class="text-status-warning"></svg><h2 id="anomalies-heading" class="text-sm font-semibold text-white">Anomaly stream</h2></div>
-    <span class="text-[11px] text-slate-400">Past hour · Latest 100</span>
-  </div>
-  <div class="p-4 sm:p-5">
-    <p role="status" class="mb-3 text-xs text-slate-400">
-      @switch (store.feed().source) {
-        @case ('idle') { Sign in to monitor anomalies. }
-        @case ('loading') { Loading recent anomalies… }
-        @case ('live') { {{ store.feed().alerts.length }} alerts · Updated {{ store.feed().updatedAt | date:'mediumTime' }} · 5s polling }
-        @default { {{ store.feed().message }} }
-      }
-    </p>
-    @if (store.feed().source === 'demo') { <p class="mb-4 rounded-lg border border-violet-400/40 bg-violet-500/10 p-3 text-xs text-violet-200">Development preview. Selecting an alert shows a demo sample, never real telemetry.</p> }
-    @if (store.feed().source === 'live' && store.feed().alerts.length === 0) {
-      <p class="py-6 text-sm text-slate-400">No anomalies detected in the past hour. Detection requires sufficient baseline history.</p>
-    }
-    @if (store.feed().alerts.length > 0) {
-      <div role="region" aria-label="Recent anomaly alerts" tabindex="0" class="max-h-[28rem] space-y-3 overflow-y-auto p-1 pr-2">
-        @for (alert of store.feed().alerts; track alert.reading.id) {
-          <button type="button" (click)="focus(alert)" [disabled]="!metric(alert)" class="block w-full rounded-xl border bg-deep/70 p-4 text-left disabled:opacity-60"
-            [class.border-status-critical/60]="critical(alert)" [class.motion-safe:animate-critical-glow]="critical(alert)"
-            [class.border-status-warning/60]="!critical(alert)" [class.motion-safe:animate-warning-glow]="!critical(alert)">
-            <span class="flex flex-wrap items-start justify-between gap-2">
-              <span class="flex items-center gap-2 text-sm font-medium" [class.text-red-300]="critical(alert)" [class.text-amber-200]="!critical(alert)"><svg lucideTriangleAlert [size]="17" aria-hidden="true"></svg>{{ reasons[alert.reason] ?? alert.reason }}</span>
-              <span class="text-[10px] font-semibold uppercase tracking-wide" [class.text-red-300]="critical(alert)" [class.text-amber-200]="!critical(alert)">{{ critical(alert) ? 'Critical' : 'Warning' }}</span>
+    <div class="panel-heading">
+        <div class="flex items-center gap-3">
+            <svg lucideTriangleAlert [size]="19" aria-hidden="true" class="text-status-warning"></svg>
+            <h2 id="anomalies-heading" class="text-sm font-semibold text-white">Anomaly stream</h2></div>
+        <span class="text-[11px] text-slate-400">Past hour · Latest 100</span>
+    </div>
+    <div class="p-4 sm:p-5">
+        <p role="status" class="mb-3 text-xs text-slate-400">
+            @switch (store.feed().source) {
+                @case ('idle') {
+                    Sign in to monitor anomalies.
+                }
+                @case ('loading') {
+                    Loading recent anomalies…
+                }
+                @case ('live') {
+                    {{ store.feed().alerts.length }} alerts · Updated {{ store.feed().updatedAt | date:'mediumTime' }} · 5s polling
+                }
+                @default {
+                    {{ store.feed().message }}
+                }
+            }
+        </p>
+        @if (store.feed().source === 'demo') {
+            <p class="mb-4 rounded-lg border border-violet-400/40 bg-violet-500/10 p-3 text-xs text-violet-200">
+                Development preview. Selecting an alert shows a demo sample, never real telemetry.</p>
+        }
+        @if (store.feed().source === 'live' && store.feed().alerts.length === 0) {
+            <p class="py-6 text-sm text-slate-400">No anomalies detected in the past hour. Detection requires sufficient
+                baseline history.</p>
+        }
+        @if (store.feed().alerts.length > 0) {
+            <div role="region" aria-label="Recent anomaly alerts" tabindex="0"
+                 class="max-h-[28rem] space-y-3 overflow-y-auto p-1 pr-2">
+                @for (alert of store.feed().alerts; track alert.reading.id) {
+                    <button type="button" (click)="focus(alert)" [disabled]="!metric(alert)"
+                            class="block w-full rounded-xl border bg-deep/70 p-4 text-left disabled:opacity-60"
+                            [class.border-status-critical/60]="critical(alert)" [class.motion-safe:animate-critical-glow]="critical(alert)"
+                            [class.border-status-warning/60]="!critical(alert)" [class.motion-safe:animate-warning-glow]="!critical(alert)">
+                    <span class="flex flex-wrap items-start justify-between gap-2">
+              <span class="flex items-center gap-2 text-sm font-medium" [class.text-red-300]="critical(alert)"
+                    [class.text-amber-200]="!critical(alert)"><svg lucideTriangleAlert [size]="17"
+                                                                   aria-hidden="true"></svg>
+                  {{ reasons[alert.reason] ?? alert.reason }}</span>
+              <span class="text-[10px] font-semibold uppercase tracking-wide" [class.text-red-300]="critical(alert)"
+                    [class.text-amber-200]="!critical(alert)">{{ critical(alert) ? 'Critical' : 'Warning' }}</span>
             </span>
-            <span class="mt-2 block break-all text-xs text-slate-300">{{ machineName(alert) }}</span>
-            <span class="mt-2 flex flex-wrap justify-between gap-2 text-xs text-slate-400">
+                    <span class="mt-2 block break-all text-xs text-slate-300">{{ machineName(alert) }}</span>
+                    <span class="mt-2 flex flex-wrap justify-between gap-2 text-xs text-slate-400">
               <span class="font-mono">{{ alert.reading.value | number:(metric(alert)?.digits ?? '1.1-2') }} {{ metric(alert)?.unit ?? alert.reading.metricType }}</span>
               <time [attr.datetime]="alert.reading.timestamp">{{ alert.reading.timestamp | date:'medium' }}</time>
             </span>
-            @if (alert.baseline; as baseline) { <span class="mt-2 block text-[11px] text-slate-400">Baseline {{ baseline.mean | number:'1.1-2' }} · Deviation {{ baseline.zScore | number:'1.1-2' }}σ · Threshold ±{{ baseline.threshold }}σ</span> }
-            @else { <span class="mt-2 block text-[11px] text-slate-400">Missing sensor signal (raw register sentinel).</span> }
-            <span class="mt-3 block text-[11px] text-indigo-300">{{ store.feed().source === 'demo' ? 'Focus demo sample →' : 'Inspect on chart →' }}</span>
-          </button>
+                    @if (alert.baseline; as baseline) {
+                        <span class="mt-2 block text-[11px] text-slate-400">Baseline {{ baseline.mean | number:'1.1-2' }}
+                            · Deviation {{ baseline.zScore | number:'1.1-2' }}σ · Threshold ±{{ baseline.threshold }}
+                            σ</span>
+                    } @else {
+                        <span class="mt-2 block text-[11px] text-slate-400">Missing sensor signal (raw register sentinel).</span>
+                    }
+                    <span class="mt-3 block text-[11px] text-indigo-300">{{ store.feed().source === 'demo' ? 'Focus demo sample →' : 'Inspect on chart →' }}</span>
+                    </button>
+                }
+            </div>
         }
-      </div>
-    }
-  </div>
+    </div>
 </section>

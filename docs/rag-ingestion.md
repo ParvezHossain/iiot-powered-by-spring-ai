@@ -31,13 +31,22 @@ requires rebuilding the JAR/image. Plain `./mvnw spring-boot:run` remains an H2
 application with RAG disabled. To enable RAG outside Docker, supply PostgreSQL
 datasource settings, `RAG_ENABLED=true`, and optionally `OLLAMA_BASE_URL`.
 
+## Use the frontend
+
+Sign in as ADMIN and open **Documents** (`/documents`). Search passages with a
+query, maximum match count, and similarity threshold. To re-ingest, select the
+corpus replacement checkbox and choose **Replace and embed corpus**. This reads
+configured server documents; it is not a file upload. The result reports document
+and chunk counts and the embedding model. A timeout does not guarantee server
+cancellation; check the backend before retrying.
+
 ## Ingest and search manually
 
 Ingestion runs automatically at startup by default. A manual refresh is also
 available; it reads the configured source location and does not accept uploads:
 
 ```sh
-curl --fail -X POST http://localhost:8080/api/documents/ingest
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail -X POST http://localhost:8080/api/documents/ingest
 ```
 
 For the current corpus the response is:
@@ -49,7 +58,7 @@ For the current corpus the response is:
 Run a semantic search, adjusting the port as needed:
 
 ```sh
-curl --fail --get http://localhost:8080/api/documents/search \
+curl -H "Authorization: Bearer $ACCESS_TOKEN" --fail --get http://localhost:8080/api/documents/search \
   --data-urlencode 'query=What repair fixed the compressor overheating caused by a blocked cooling screen?' \
   --data-urlencode 'topK=3'
 ```
@@ -66,7 +75,8 @@ finite values from 0 to 1. Invalid parameters return HTTP 400. Results are
 ordered by cosine similarity, highest first; a higher threshold can return fewer
 than `topK` results or an empty array. Scores indicate vector similarity, not
 diagnostic confidence. Multiple sections of the same source can appear.
-With RAG disabled, the ingestion and search routes are not registered.
+Both routes require an ADMIN JWT. With RAG disabled they remain registered and
+return HTTP 503 to authorized callers.
 
 ## Chunking and replacement behavior
 
@@ -110,7 +120,7 @@ index, which is sufficient for this small corpus.
 
 | Property / environment variable | Default | Purpose |
 | --- | --- | --- |
-| `rag.enabled` / `RAG_ENABLED` | `false` | Enable PostgreSQL-backed RAG beans and routes |
+| `rag.enabled` / `RAG_ENABLED` | `false` | Enable PostgreSQL-backed RAG execution |
 | `rag.ingest-on-startup` / `RAG_INGEST_ON_STARTUP` | `true` | Refresh corpus before application readiness |
 | `rag.batch-size` / `RAG_BATCH_SIZE` | `16` | Chunks per embedding/write call, 1–64 |
 | `rag.documents` / `RAG_DOCUMENTS` | `classpath:equipment/*.md` | Source resource pattern |

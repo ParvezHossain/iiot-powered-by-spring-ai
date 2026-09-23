@@ -77,15 +77,17 @@ public class SecurityConfiguration {
         cors.setAllowCredentials(false);
         var source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", cors);
-        return http.addFilterBefore(new AuthRateLimitFilter(rateLimit, java.time.Clock.systemUTC()),
-                        org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class)
-                .csrf(c -> c.disable()).cors(c -> c.configurationSource(source))
+        return http.addFilterBefore(
+                new AuthRateLimitFilter(rateLimit, java.time.Clock.systemUTC()),
+                        org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class
+                )
+                .csrf(c -> c.disable())
+                .cors(c -> c.configurationSource(source))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .requestCache(c -> c.disable())
                 .authorizeHttpRequests(a -> a.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(
                                 HttpMethod.POST,
-                                "/api/auth/register",
                                 "/api/auth/login",
                                 "/api/auth/refresh",
                                 "/api/auth/logout"
@@ -102,6 +104,7 @@ public class SecurityConfiguration {
                                 "/swagger-ui.html"
                         ).permitAll()
                         .requestMatchers(
+                                "/api/auth/register",
                                 "/api/admin/**",
                                 "/api/documents/**",
                                 "/api/rag/**",

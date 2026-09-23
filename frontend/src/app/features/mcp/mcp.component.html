@@ -1,0 +1,63 @@
+<section class="panel mx-auto max-w-4xl p-6"><h1 class="text-xl font-semibold text-white">MCP tools</h1>
+    <p class="mt-3 text-sm text-slate-400">Connect to the equipment server, discover tools and their schemas, then run a
+        tool with JSON parameters. Close the session when finished.</p>
+    @if (!client.auth.isAdmin()) {
+        <p role="status" class="mt-4 text-amber-200">An administrator session is required.</p>
+    } @else {
+        <div class="my-5 flex flex-wrap gap-3">
+            <button class="ai-button" (click)="client.connect()" [disabled]="client.busy() || client.connected()">
+                Connect
+            </button>
+            <button class="ai-button" (click)="client.listTools()" [disabled]="client.busy() || !client.connected()">
+                Discover tools
+            </button>
+            <button class="ai-button" (click)="client.close()" [disabled]="client.busy() || !client.connected()">Close
+                session
+            </button>
+        </div>
+        <p role="status"
+           class="text-sm text-violet-200">{{ client.busy() ? 'Processing…' : client.connected() ? 'Connected' : 'Disconnected' }}</p>
+        @if (client.tools().length) {
+            <form (ngSubmit)="client.callTool(selectedTool,arguments)" class="mt-6 space-y-4">
+                <label class="block">Tool<select name="tool" [(ngModel)]="selectedTool" class="ai-input"
+                                                 [disabled]="client.busy()">
+                    <option value="">Choose a tool</option>@for (tool of client.tools(); track tool.name) {
+                    <option [value]="tool.name">{{ tool.name }}</option>
+                }</select></label>
+                @for (tool of client.tools(); track tool.name) {
+                    @if (tool.name === selectedTool) {
+                        <p class="text-sm text-slate-400">{{ tool.description }}</p>
+                        <details>
+                            <summary class="text-sm text-violet-200">Input schema</summary>
+                            <pre class="ai-code mt-2">{{ format(tool.inputSchema) }}</pre>
+                        </details>
+                    }
+                }
+                <label class="block">JSON parameters<textarea name="arguments" [(ngModel)]="arguments"
+                                                              class="ai-input font-mono" rows="6"
+                                                              [disabled]="client.busy()" spellcheck="false"></textarea></label>
+                <button class="ai-button" [disabled]="client.busy() || !client.connected() || !selectedTool">Run tool
+                </button>
+            </form>
+        }
+        @if (client.output(); as output) {
+            <h2 class="mb-3 mt-6 font-semibold">Server result</h2>
+            <pre class="ai-code">{{ format(output) }}</pre>
+        }
+        <section class="mt-6 border-t border-muted pt-5"><h2 class="font-semibold">Server events</h2>
+            <p class="my-3 text-xs text-slate-400">An open event stream may remain idle. The latest 50 messages are
+                retained. Reconnect manually after a disconnect.</p>
+            <button class="ai-button" (click)="client.listening() ? client.stopEvents() : client.startEvents()"
+                    [disabled]="!client.connected() || client.busy()">{{ client.listening() ? 'Stop event stream' : 'Open event stream' }}
+            </button>
+            <p role="status"
+               class="mt-2 text-xs text-slate-400">{{ client.listening() ? 'Listening for server events…' : 'Event stream stopped' }}</p>
+            @for (event of client.events(); track $index) {
+                <pre class="ai-code mt-3">{{ format(event) }}</pre>
+            }
+        </section>
+    }
+    @if (client.error()) {
+        <p role="alert" class="mt-4 text-amber-300">{{ client.error() }}</p>
+    }
+</section>
