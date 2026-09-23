@@ -55,6 +55,29 @@ class TelemetryApiTests {
     }
 
     @Test
+    void listMachinesIncludesEmptyMachinesAndDeterministicLatestReadings() throws Exception {
+        UUID empty = UUID.randomUUID();
+        jdbc.update("INSERT INTO telemetry.machines(id,name,status) VALUES(?, 'Empty machine', 'OFFLINE')", empty);
+        reading(machine, "temperature_celsius", 101, TO);
+        mvc.perform(get("/api/machines"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == '" + empty + "')].latestReadings[0]").doesNotExist())
+                .andExpect(jsonPath("$[?(@.id == '" + empty + "')].name").value(org.hamcrest.Matchers.hasItem("Empty machine")))
+                .andExpect(jsonPath("$[?(@.id == '" + machine + "')].latestReadings[?(@.metricType == 'temperature_celsius')].value")
+                        .value(org.hamcrest.Matchers.hasItem(101.0)));
+    }
+
+    @Test
+    void machineDiscoveryRequiresAuthenticationAndAllowsUserRole() throws Exception {
+        var secured = org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup(context)
+                .apply(org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity()).build();
+        secured.perform(get("/api/machines")).andExpect(status().isUnauthorized());
+        secured.perform(get("/api/machines").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt()
+                        .authorities(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER"))))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void statusReturnsStoredStateAndLatestPerMetricWithDeterministicTies() throws Exception {
         reading(machine, "temperature_celsius", 101, TO);
         mvc.perform(get("/api/machines/{id}/status", machine))

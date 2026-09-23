@@ -53,7 +53,7 @@ jobs:
           SPRING_DATASOURCE_USERNAME: iiot
           SPRING_DATASOURCE_PASSWORD: iiot_test
           SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
-        run: ./mvnw --batch-mode --no-transfer-progress -Dtest=TelemetrySchemaTests,TelemetrySimulatorTests,TelemetryApiTests,RollingAnomalyDetectorTests,AnomalyDetectionAcceptanceTests test
+        run: ./mvnw --batch-mode --no-transfer-progress -Dskip.frontend=true -Dtest=TelemetrySchemaTests,TelemetrySimulatorTests,TelemetryApiTests,RollingAnomalyDetectorTests,AnomalyDetectionAcceptanceTests test
 
       - name: Verify authentication and refresh locking on PostgreSQL
         env:
@@ -61,7 +61,7 @@ jobs:
           SPRING_DATASOURCE_USERNAME: iiot
           SPRING_DATASOURCE_PASSWORD: iiot_test
           SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
-        run: ./mvnw --batch-mode --no-transfer-progress -Dtest=AuthenticationTests test
+        run: ./mvnw --batch-mode --no-transfer-progress -Dskip.frontend=true -Dtest=AuthenticationTests test
 
       - name: Verify vector ingestion transactions on pgvector
         env:
@@ -70,4 +70,4 @@ jobs:
           SPRING_DATASOURCE_USERNAME: iiot
           SPRING_DATASOURCE_PASSWORD: iiot_test
           SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
-        run: ./mvnw --batch-mode --no-transfer-progress -Dtest=PgVectorIngestionTests test
+        run: ./mvnw --batch-mode --no-transfer-progress -Dskip.frontend=true -Dtest=PgVectorIngestionTests test

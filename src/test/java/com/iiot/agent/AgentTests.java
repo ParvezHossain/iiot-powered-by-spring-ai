@@ -83,6 +83,7 @@ class AgentTests {
         var result = service.answer("What does the manual say about SIM-012 vibration?");
         assertThat(result.insufficientEvidence()).isFalse();
         assertThat(result.evidence()).extracting(AgentService.Evidence::tool).containsExactly("retrieveEquipmentKnowledge");
+        assertThat(result.evidence().getFirst().input()).isEqualTo("{\"question\":\"SIM-012 vibration guidance\"}");
         verifyNoInteractions(queries);
     }
 

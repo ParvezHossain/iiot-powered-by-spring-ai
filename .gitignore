@@ -33,3 +33,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Generated Angular distribution (owned by Maven)
+/src/main/resources/static/

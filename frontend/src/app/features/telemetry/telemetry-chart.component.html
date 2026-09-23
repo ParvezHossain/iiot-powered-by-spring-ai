@@ -1,0 +1,50 @@
+<section id="telemetry-chart" tabindex="-1" class="panel scroll-mt-24" aria-labelledby="chart-heading">
+  <div class="panel-heading">
+    <div><h2 id="chart-heading" class="text-sm font-semibold text-white">Sensor trends</h2><p class="mt-1 text-xs text-slate-400">{{ store.anomalyFocus()?.demo ? 'Demo machine' : (store.selectedMachine()?.name ?? store.anomalyFocus()?.reading?.machineId ?? 'Select a machine') }}</p></div>
+    <label class="flex items-center gap-2 text-xs text-slate-400">Time window
+      <select aria-label="Time window" [value]="store.windowMinutes()" (change)="store.selectWindow(+$any($event.target).value)" class="rounded-lg border border-muted bg-deep px-2 py-2 text-slate-200">
+        @for (minutes of windows; track minutes) { <option [value]="minutes">{{ store.anomalyFocus() ? 'Centered' : 'Last' }} {{ minutes }} minutes</option> }
+      </select>
+    </label>
+  </div>
+  <div class="p-4 sm:p-5">
+    <div class="flex flex-wrap gap-2" role="group" aria-label="Sensor metric">
+      @for (metric of metrics; track metric.key) {
+        <button type="button" (click)="store.selectMetric(metric.key)" [attr.aria-pressed]="store.metric() === metric.key" class="rounded-lg border px-3 py-2 text-xs transition-colors"
+          [class.border-indigo-400]="store.metric() === metric.key" [class.bg-indigo-500/15]="store.metric() === metric.key" [class.text-white]="store.metric() === metric.key"
+          [class.border-muted]="store.metric() !== metric.key" [class.text-slate-400]="store.metric() !== metric.key">{{ metric.label }}</button>
+      }
+    </div>
+    @if (store.anomalyFocus(); as focus) {
+      <p role="status" class="mt-4 text-xs text-amber-200">{{ focus.demo ? 'Demo sample — synthetic data' : 'Anomaly focus' }} · {{ focus.reading.timestamp | date:'medium' }}
+        <button type="button" (click)="store.resumeLive()" class="ml-3 underline">Return to live telemetry</button>
+      </p>
+    }
+    @if (!store.anomalyFocus()?.demo && (!store.auth.isAuthenticated() || !store.selectedMachineId())) {
+      <p class="flex min-h-64 items-center justify-center text-sm text-slate-400">Select an available machine after signing in.</p>
+    } @else if (store.history().status === 'loading') {
+      <p role="status" class="flex min-h-64 items-center justify-center text-sm text-slate-400">Loading readings…</p>
+    } @else if (store.history().status === 'error') {
+      <p role="status" class="flex min-h-64 items-center justify-center text-sm text-amber-300">{{ store.history().error }}</p>
+    } @else if (store.history().data.length === 0) {
+      <p role="status" class="flex min-h-64 items-center justify-center text-sm text-slate-400">No readings in this time window.</p>
+    } @else {
+      <div class="my-5 flex flex-wrap items-baseline justify-between gap-2">
+        <p class="font-mono text-2xl text-white">{{ latest()?.value | number:store.metricInfo().digits }} <span class="text-sm text-slate-400">{{ store.metricInfo().unit }}</span></p>
+        <p class="text-[11px] text-slate-400">Latest sample {{ latest()?.timestamp | date:'mediumTime' }}</p>
+      </div>
+      <div class="relative h-64 min-w-0 sm:h-72">
+        <canvas baseChart type="line" [data]="chartData()" [options]="chartOptions()" [plugins]="glow" role="img" [attr.aria-label]="store.metricInfo().label + ' readings for ' + store.selectedMachine()?.name + '. Recent values are available in the table below.'"></canvas>
+      </div>
+      <p class="mt-3 text-[11px] text-slate-400">{{ store.history().data.length }} samples · Updated {{ store.history().updatedAt | date:'mediumTime' }} · {{ store.anomalyFocus()?.demo ? 'Synthetic preview' : '5s polling' }}</p>
+      <details class="mt-4 border-t border-muted pt-3 text-xs text-slate-400">
+        <summary>Recent readings (latest 20)</summary>
+        <div class="mt-3 max-h-52 overflow-auto">
+          <table class="w-full text-left"><caption class="sr-only">Recent {{ store.metricInfo().label }} readings</caption><thead><tr><th scope="col" class="py-2">Local time</th><th scope="col" class="py-2 text-right">Value ({{ store.metricInfo().unit }})</th></tr></thead>
+            <tbody>@for (reading of recent(); track reading.id) { <tr class="border-t border-muted"><td class="py-2">{{ reading.timestamp | date:'medium' }}</td><td class="py-2 text-right font-mono">{{ reading.value | number:store.metricInfo().digits }}</td></tr> }</tbody>
+          </table>
+        </div>
+      </details>
+    }
+  </div>
+</section>

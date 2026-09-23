@@ -1,0 +1,19 @@
+<dialog #dialog aria-labelledby="login-title" aria-describedby="login-description" (cancel)="$event.preventDefault(); close()" class="glass-panel fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl p-6 text-slate-200 shadow-2xl backdrop:bg-black/70">
+  <h2 id="login-title" class="text-xl font-semibold text-white">Sign in to your workspace</h2>
+  <p id="login-description" class="mt-2 text-sm text-slate-400">Use your account credentials. AI questions and tool calls require an administrator role.</p>
+  <form #form="ngForm" (ngSubmit)="submit()" class="mt-6 space-y-4">
+    <div>
+      <label for="login-identity" class="mb-2 block text-sm">Username or email</label>
+      <input id="login-identity" name="usernameOrEmail" [(ngModel)]="usernameOrEmail" required maxlength="254" autocomplete="username" autofocus [disabled]="auth.busy()" class="w-full rounded-lg border border-muted bg-deep px-3 py-2">
+    </div>
+    <div>
+      <label for="login-password" class="mb-2 block text-sm">Password</label>
+      <input id="login-password" name="password" type="password" [(ngModel)]="password" required maxlength="72" autocomplete="current-password" [disabled]="auth.busy()" class="w-full rounded-lg border border-muted bg-deep px-3 py-2">
+    </div>
+    @if (error()) { <p role="alert" class="text-sm text-red-300">{{ error() }}</p> }
+    <div class="flex justify-end gap-3 pt-2">
+      <button type="button" (click)="close()" class="rounded-lg border border-muted px-4 py-2 text-sm">Cancel</button>
+      <button type="submit" [disabled]="form.invalid || auth.busy()" class="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{{ auth.busy() ? 'Signing in…' : 'Sign in' }}</button>
+    </div>
+  </form>
+</dialog>

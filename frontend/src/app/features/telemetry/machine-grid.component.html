@@ -1,0 +1,42 @@
+<section class="panel" aria-labelledby="fleet-heading">
+  <div class="panel-heading">
+    <h2 id="fleet-heading" class="text-sm font-semibold text-white">Fleet telemetry</h2>
+    <span class="text-xs text-slate-400">{{ store.fleet().data.length }} machines · 5s updates</span>
+  </div>
+  <div class="p-4 sm:p-5">
+    @if (!store.auth.isAuthenticated()) {
+      <div class="py-8 text-center"><p class="text-sm text-slate-400">Sign in to view your machines and live sensor readings.</p><button type="button" (click)="store.auth.openLogin()" class="mt-4 rounded-lg bg-indigo-500 px-4 py-2 text-sm text-white">Sign in to view telemetry</button></div>
+    } @else if (store.fleet().status === 'loading') {
+      <p role="status" class="py-8 text-center text-sm text-slate-400">Loading machines…</p>
+    } @else if (store.fleet().status === 'error') {
+      <p role="status" class="py-6 text-sm text-amber-300">{{ store.fleet().error }}</p>
+    } @else if (store.fleet().data.length === 0) {
+      <p role="status" class="py-8 text-center text-sm text-slate-400">No machines are available yet.</p>
+    } @else {
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2" aria-label="Select a machine">
+        @for (machine of store.fleet().data; track machine.id) {
+          <button type="button" (click)="store.selectMachine(machine.id)" [attr.aria-pressed]="store.selectedMachineId() === machine.id"
+            class="min-w-0 rounded-xl border bg-deep/60 p-4 text-left transition-colors hover:border-indigo-400/60"
+            [class.border-indigo-400]="store.selectedMachineId() === machine.id" [class.border-muted]="store.selectedMachineId() !== machine.id"
+            [class.ring-1]="store.selectedMachineId() === machine.id" [class.ring-indigo-400/30]="store.selectedMachineId() === machine.id">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <span class="font-mono text-sm font-semibold text-white">{{ machine.name }}</span>
+              <span class="rounded-full border px-2 py-0.5 text-[10px] font-medium" [class]="statusClass[machine.status] ?? statusClass.OFFLINE">{{ machine.status }}</span>
+            </div>
+            <p class="mt-2 truncate text-xs text-slate-400">{{ machine.location || 'Location not specified' }}</p>
+            <dl class="mt-4 space-y-2">
+              @for (metric of metrics; track metric.key) {
+                <div class="flex items-center justify-between gap-2 text-xs"><dt class="text-slate-400">{{ metric.label }}</dt><dd class="font-mono text-slate-200">
+                  @if (latest(machine, metric.key); as reading) {
+                    <span [title]="(reading.timestamp | date:'medium') ?? ''">{{ reading.value | number:metric.digits }} <span class="text-slate-400">{{ metric.unit }}</span></span>
+                  } @else { <span aria-label="No reading">—</span> }
+                </dd></div>
+              }
+            </dl>
+          </button>
+        }
+      </div>
+      <p class="mt-4 text-[11px] text-slate-400">Last checked {{ store.fleet().updatedAt | date:'mediumTime' }} · Card values are the latest stored samples.</p>
+    }
+  </div>
+</section>

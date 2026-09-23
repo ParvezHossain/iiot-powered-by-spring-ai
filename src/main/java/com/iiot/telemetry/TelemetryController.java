@@ -27,6 +27,13 @@ public class TelemetryController {
         this.queries = queries;
     }
 
+    @Operation(operationId = "listMachines", summary = "List machines with latest readings",
+            description = "Authenticated users can discover stored machine UUIDs, metadata and latest readings per metric. Ordered by name then UUID. Includes machines without readings.")
+    @GetMapping("/machines")
+    public List<TelemetryQueryService.MachineStatus> machines() {
+        return queries.machines();
+    }
+
     @Operation(operationId = "getMachineStatus", summary = "Get current machine status",
             description = "Returns machine metadata and the latest reading per metric, ordered by metric type. latestReadings may be empty.")
     @ApiResponse(responseCode = "200", description = "Successful response")

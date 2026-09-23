@@ -1,3 +1,13 @@
+> **Angular workspace (Phases 1.1–3.1):** `./mvnw package` now builds `frontend/` and
+> bundles the public UI at `http://localhost:8080/`. Docker builds include it too.
+> Use `-Dskip.frontend=true` for backend-only Maven work. See
+> [frontend/README.md](frontend/README.md) for setup and SPA routing details.
+> The dark control-room layout includes live health status and a JWT sign-in dialog.
+> Tokens remain in memory; reloading requires signing in again.
+> Prompt 3.1 adds machine cards and live charts. Rebuild/restart Spring Boot for
+> the new authenticated `GET /api/machines` endpoint.
+> Existing API JWT and ADMIN requirements still apply.
+
 # Run and Explore IIoT Powered by AI
 
 > **Authentication setup:** REST APIs now require JWT bearer tokens. Before starting,

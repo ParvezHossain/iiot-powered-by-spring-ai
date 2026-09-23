@@ -21,6 +21,8 @@
 	</licenses>
 	<properties>
 		<java.version>21</java.version>
+		<node.version>v24.19.0</node.version>
+		<npm.version>11.17.0</npm.version>
 		<spring-ai.version>2.0.1</spring-ai.version>
 		<mcp.version>2.0.0</mcp.version>
 		<springdoc.version>3.1.1</springdoc.version>
@@ -142,6 +144,14 @@
 			</resource>
 		</resources>
 		<plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-clean-plugin</artifactId>
+                <configuration><filesets>
+                    <fileset><directory>src/main/resources/static</directory></fileset>
+                    <fileset><directory>frontend/dist</directory></fileset>
+                </filesets></configuration>
+            </plugin>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
@@ -149,4 +159,60 @@
 		</plugins>
 	</build>
 
+	<!-- Disable only for backend-only work: -Dskip.frontend=true. -->
+	<profiles>
+		<profile>
+			<id>frontend</id>
+			<activation><property><name>!skip.frontend</name></property></activation>
+			<build><plugins>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-antrun-plugin</artifactId>
+					<version>3.2.0</version>
+					<executions><execution>
+						<id>clear-generated-frontend</id><phase>generate-resources</phase><goals><goal>run</goal></goals>
+						<configuration><target>
+							<delete dir="${project.basedir}/src/main/resources/static"/>
+							<delete dir="${project.build.outputDirectory}/static"/>
+						</target></configuration>
+					</execution></executions>
+				</plugin>
+				<plugin>
+					<groupId>com.github.eirslett</groupId>
+					<artifactId>frontend-maven-plugin</artifactId>
+					<version>2.0.2</version>
+					<configuration>
+						<workingDirectory>frontend</workingDirectory>
+						<installDirectory>${project.build.directory}/frontend</installDirectory>
+						<environmentVariables><NG_CLI_ANALYTICS>false</NG_CLI_ANALYTICS></environmentVariables>
+					</configuration>
+					<executions>
+						<execution><id>install-node-and-npm</id><phase>generate-resources</phase>
+							<goals><goal>install-node-and-npm</goal></goals>
+							<configuration><nodeVersion>${node.version}</nodeVersion><npmVersion>${npm.version}</npmVersion></configuration>
+						</execution>
+						<execution><id>npm-ci</id><phase>generate-resources</phase><goals><goal>npm</goal></goals>
+							<configuration><arguments>ci --no-fund --no-audit</arguments></configuration>
+						</execution>
+						<execution><id>angular-production-build</id><phase>generate-resources</phase><goals><goal>npm</goal></goals>
+							<configuration><arguments>run build</arguments></configuration>
+						</execution>
+                        <execution><id>angular-auth-tests</id><phase>test</phase><goals><goal>npm</goal></goals>
+                            <configuration><arguments>test</arguments></configuration>
+                        </execution>
+					</executions>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId><artifactId>maven-resources-plugin</artifactId>
+					<executions><execution><id>copy-angular-assets</id><phase>generate-resources</phase>
+						<goals><goal>copy-resources</goal></goals>
+						<configuration>
+							<outputDirectory>${project.basedir}/src/main/resources/static</outputDirectory>
+							<resources><resource><directory>frontend/dist/iiot-control-center</directory><filtering>false</filtering></resource></resources>
+						</configuration>
+					</execution></executions>
+				</plugin>
+			</plugins></build>
+		</profile>
+	</profiles>
 </project>

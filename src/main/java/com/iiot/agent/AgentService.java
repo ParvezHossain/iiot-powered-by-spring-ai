@@ -203,7 +203,7 @@ public class AgentService {
                 if (resultCharacters > 50000) {
                     return insufficient("The evidence limit was reached. Please request a smaller time range or page.", evidence);
                 }
-                evidence.add(new Evidence(id, tool.name(), success, result));
+                evidence.add(new Evidence(id, tool.name(), success, result, tool.arguments()));
                 responses.add(new ToolResponseMessage.ToolResponse(tool.id(), tool.name(),
                         json.writeValueAsString(Map.of("evidenceId", id, "success", success, "result", json.readTree(result)))));
             }
@@ -317,7 +317,8 @@ public class AgentService {
     public record Evidence(@Schema(description = "Evidence label referenced by evidenceIds") String id,
             @Schema(description = "Invoked tool name") String tool,
             @Schema(description = "Whether the tool call succeeded") boolean success,
-            @Schema(description = "Serialized tool result or failure detail") String result) {}
+            @Schema(description = "Serialized tool result or failure detail") String result,
+            @Schema(description = "Serialized input parameters supplied to the tool") String input) {}
     public record Answer(String answer, boolean insufficientEvidence, List<String> evidenceIds, List<Evidence> evidence) {}
     @Schema(name = "AgentConversationAnswer", description = "Agent response and evidence for a conversation turn.")
     public record ConversationAnswer(@Schema(description = "Reuse this UUID for follow-up questions") java.util.UUID conversationId,

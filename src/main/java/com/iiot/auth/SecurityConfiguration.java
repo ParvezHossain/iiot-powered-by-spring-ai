@@ -6,6 +6,7 @@ import java.util.UUID;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
+import com.iiot.config.WebConfig;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
@@ -108,6 +109,7 @@ public class SecurityConfiguration {
                                 "/mcp",
                                 "/mcp/**"
                         ).hasRole("ADMIN")
+                        .requestMatchers(WebConfig::isFrontendRequest).permitAll()
                         .anyRequest()
                         .authenticated())
                 .exceptionHandling(e -> e.authenticationEntryPoint((q, r, x) -> error(r, 401, "Authentication required"))

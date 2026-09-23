@@ -14,7 +14,7 @@ def main():
     root = Path(__file__).resolve().parents[1]
     started = time.monotonic()
     # Offline runs make the timing independent of artifact servers. Preparation is explicit.
-    command = [str(root / 'mvnw'), '--offline', '--batch-mode', '--no-transfer-progress',
+    command = [str(root / 'mvnw'), '--offline', '-Dskip.frontend=true', '--batch-mode', '--no-transfer-progress',
                '-Dtest=InterviewDemoTests', 'test']
     env = os.environ.copy()
     # Do not inherit connection settings or JVM/Maven overrides into the isolated demo.

@@ -7,6 +7,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -22,6 +23,39 @@ public class TelemetryQueryService {
     public TelemetryQueryService(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
         this.detector = new RollingAnomalyDetector(jdbc);
+    }
+
+    public List<MachineStatus> machines() {
+        // One query, including machines without readings; use the same tie-break as status().
+        return jdbc.query("""
+                SELECT m.id AS machine_id, m.name, m.location, m.status,
+                       r.id AS reading_id, r.metric_type, r."value", r."timestamp"
+                FROM telemetry.machines m
+                LEFT JOIN (
+                    SELECT s.*, ROW_NUMBER() OVER (
+                        PARTITION BY machine_id, metric_type ORDER BY "timestamp" DESC, id DESC
+                    ) AS reading_rank FROM telemetry.sensor_readings s
+                ) r ON r.machine_id = m.id AND r.reading_rank = 1
+                ORDER BY m.name, m.id, r.metric_type
+                """, rs -> {
+            var machines = new LinkedHashMap<UUID, MachineStatus>();
+            while (rs.next()) {
+                UUID id = rs.getObject("machine_id", UUID.class);
+                var machine = machines.get(id);
+                if (machine == null) {
+                    machine = new MachineStatus(id, rs.getString("name"), rs.getString("location"),
+                            rs.getString("status"), new ArrayList<>());
+                    machines.put(id, machine);
+                }
+                if (rs.getObject("reading_id") != null) {
+                    machine.latestReadings().add(new Reading(rs.getLong("reading_id"), id,
+                            rs.getString("metric_type"), rs.getDouble("value"),
+                            rs.getObject("timestamp", OffsetDateTime.class)));
+                }
+            }
+            return machines.values().stream().map(m -> new MachineStatus(m.id(), m.name(), m.location(),
+                    m.status(), List.copyOf(m.latestReadings()))).toList();
+        });
     }
 
     public MachineStatus status(UUID id) {
